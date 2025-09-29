@@ -1,6 +1,8 @@
 # otros.py
 # Subflujo “Otros” para:
 # - LESIONES GRAVES / LESIONES LEVES / LESIONES GRAVISIMAS
+# - ABUSO DE ARMAS CON LESIONES
+# - ABUSO DE ARMAS SIN LESIONES
 # - ABUSO SEXUAL CON ACCESO CARNAL (VIOLACION)
 # - ABUSO SEXUAL SIMPLE
 #     · Víctimas por sexo → AO (total) y AG/AH/AI
@@ -11,8 +13,6 @@
 # Integración:
 #   import otros
 #   otros.render(excel_path=st.session_state.excel_path, fila=st.session_state.fila, delito_x3=st.session_state.delito)
-#
-# Controla su paso con st.session_state.others_step y marca others_done=True al finalizar.
 
 import streamlit as st
 from openpyxl import load_workbook, Workbook
@@ -60,15 +60,23 @@ def mostrar_hecho_referencia():
 # ==============================
 # Delitos que activan este flujo
 # ==============================
+# Importante: usamos .strip() al comparar, para tolerar espacios finales en la lista principal.
 DELITOS_LESIONES = {
     "LESIONES GRAVES",
     "LESIONES LEVES",
     "LESIONES GRAVISIMAS",
 }
+
+DELITOS_ABUSO_ARMAS = {
+    "ABUSO DE ARMAS CON LESIONES",
+    "ABUSO DE ARMAS SIN LESIONES",
+}
+
 DELITOS_SEXUALES = {
     "ABUSO SEXUAL CON ACCESO CARNAL (VIOLACION)",
     "ABUSO SEXUAL SIMPLE",
 }
+
 DELITO_DESAPARICION = "DESAPARICION DE PERSONA"
 
 # ==============================
@@ -95,7 +103,6 @@ SI_NO = ["SI", "NO"]
 # ==============================
 def render(excel_path: str, fila: int, delito_x3: str) -> None:
     """
-    Renderiza el subflujo para Lesiones, Delitos Sexuales y Desaparición de Persona.
     Guarda:
       - AO{fila}: total de víctimas
       - AG/AH/AI{fila}: distribución por sexo de víctimas
@@ -105,11 +112,13 @@ def render(excel_path: str, fila: int, delito_x3: str) -> None:
     """
     delito_norm = (delito_x3 or "").strip()
 
-    if not (
+    aplica = (
         delito_norm in DELITOS_LESIONES
+        or delito_norm in DELITOS_ABUSO_ARMAS
         or delito_norm in DELITOS_SEXUALES
         or delito_norm == DELITO_DESAPARICION
-    ):
+    )
+    if not aplica:
         st.session_state.step = 6
         st.rerun()
 
