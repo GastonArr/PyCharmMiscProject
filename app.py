@@ -435,7 +435,12 @@ elif st.session_state.step == 5:
 
 elif st.session_state.step == 6:
     # --- Subflujo: Lesiones / Desaparición de Persona (otros.py) ---
-    delitos_otros = {"LESIONES GRAVES", "LESIONES LEVES", "LESIONES GRAVISIMAS", "DESAPARICION DE PERSONA"}
+    delitos_otros = {
+        "LESIONES GRAVES", "LESIONES LEVES", "LESIONES GRAVISIMAS",
+        "DESAPARICION DE PERSONA",
+        "ABUSO SEXUAL CON ACCESO CARNAL (VIOLACION)",
+        "ABUSO SEXUAL SIMPLE",
+    }
     delito_norm_otros = (st.session_state.delito or "").strip()
     if (delito_norm_otros in delitos_otros) and not st.session_state.get("others_done", False):
         otros.render(

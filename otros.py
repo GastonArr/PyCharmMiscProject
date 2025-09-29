@@ -1,8 +1,10 @@
 # otros.py
 # Subflujo “Otros” para:
-# - LESIONES GRAVES / LESIONES LEVES / LESIONES GRAVISIMAS:
-#     · VULNERABILIDAD DE LA VÍCTIMA (AP)
+# - LESIONES GRAVES / LESIONES LEVES / LESIONES GRAVISIMAS
+# - ABUSO SEXUAL CON ACCESO CARNAL (VIOLACION)
+# - ABUSO SEXUAL SIMPLE
 #     · Víctimas por sexo → AO (total) y AG/AH/AI
+#     · VULNERABILIDAD DE LA VÍCTIMA (AP)
 # - DESAPARICION DE PERSONA:
 #     · Lo mismo que arriba + “¿Apareció?” (BA: SI/NO)
 #
@@ -63,6 +65,10 @@ DELITOS_LESIONES = {
     "LESIONES LEVES",
     "LESIONES GRAVISIMAS",
 }
+DELITOS_SEXUALES = {
+    "ABUSO SEXUAL CON ACCESO CARNAL (VIOLACION)",
+    "ABUSO SEXUAL SIMPLE",
+}
 DELITO_DESAPARICION = "DESAPARICION DE PERSONA"
 
 # ==============================
@@ -89,7 +95,7 @@ SI_NO = ["SI", "NO"]
 # ==============================
 def render(excel_path: str, fila: int, delito_x3: str) -> None:
     """
-    Renderiza el subflujo para Lesiones y Desaparición de Persona.
+    Renderiza el subflujo para Lesiones, Delitos Sexuales y Desaparición de Persona.
     Guarda:
       - AO{fila}: total de víctimas
       - AG/AH/AI{fila}: distribución por sexo de víctimas
@@ -99,7 +105,11 @@ def render(excel_path: str, fila: int, delito_x3: str) -> None:
     """
     delito_norm = (delito_x3 or "").strip()
 
-    if not (delito_norm in DELITOS_LESIONES or delito_norm == DELITO_DESAPARICION):
+    if not (
+        delito_norm in DELITOS_LESIONES
+        or delito_norm in DELITOS_SEXUALES
+        or delito_norm == DELITO_DESAPARICION
+    ):
         st.session_state.step = 6
         st.rerun()
 
@@ -118,7 +128,6 @@ def render(excel_path: str, fila: int, delito_x3: str) -> None:
         st.markdown("### Víctimas")
         st.caption("Distribución por sexo de las víctimas. Podés agregar otro sexo si corresponde (máx. 3 filas, total hasta 10).")
 
-        # Usamos un estado propio para no colisionar con Robos/Hurtos
         if "others_vict_rows" not in st.session_state or not isinstance(st.session_state.others_vict_rows, list):
             st.session_state.others_vict_rows = [{"sexo": "MASCULINO", "cant": "1"}]
 
