@@ -103,12 +103,9 @@ SI_NO = ["SI", "NO"]
 # ==============================
 def render(excel_path: str, fila: int, delito_x3: str) -> None:
     """
-    Guarda:
-      - AO{fila}: total de víctimas
-      - AG/AH/AI{fila}: distribución por sexo de víctimas
-      - AP{fila}: vulnerabilidad de la víctima
-      - BA{fila}: (solo si DESAPARICION DE PERSONA) “¿Apareció?” (SI/NO)
-    Manejo de estado: st.session_state.others_step, others_done y others_preview.
+    Manejo de estado: st.session_state.others_step, others_done, others_preview.
+    Con este cambio NO se escribe en Excel aquí: solo se valida, se arma others_preview
+    y se vuelve al resumen (step=6). El guardado real va en “Finalizar y guardar ✅”.
     """
     delito_norm = (delito_x3 or "").strip()
 
@@ -125,10 +122,28 @@ def render(excel_path: str, fila: int, delito_x3: str) -> None:
     if "others_step" not in st.session_state:
         st.session_state.others_step = 1
 
+    # === NUEVO: precarga desde others_preview para conservar datos al volver ===
+    ss = st.session_state
+    prev = ss.get("others_preview") or {}
+
+    # Sembrar lista dinámica de víctimas si viene desde preview y aún no existe
+    if ("others_vict_rows" not in ss or not isinstance(ss.others_vict_rows, list)) and prev.get("vict_rows"):
+        ss.others_vict_rows = list(prev.get("vict_rows"))
+
+    # Helper para no pisar lo recién tipeado
+    def seed(k, v):
+        if v not in (None, "") and k not in ss:
+            ss[k] = v
+
+    # Sembrar valores simples para widgets
+    seed("others_vulnerab", prev.get("vulnerabilidad"))
+    if delito_norm == DELITO_DESAPARICION:
+        seed("others_aparecio", prev.get("aparecio"))
+
     def C(col: str) -> str:
         return f"{col}{fila}"
 
-    # =============== Paso único: Captura y guardado =================
+    # =============== Paso único: Captura (sin guardar acá) =================
     if st.session_state.others_step == 1:
         st.subheader("Datos adicionales")
         mostrar_hecho_referencia()
@@ -171,7 +186,6 @@ def render(excel_path: str, fila: int, delito_x3: str) -> None:
             st.session_state.others_vict_rows = [r for j, r in enumerate(st.session_state.others_vict_rows) if j not in vict_borrar]
             st.rerun()
 
-        # Agregar otro sexo (hasta 3 filas y mientras total < 10)
         if len(st.session_state.others_vict_rows) < 3 and total_vict < 10:
             if st.button("Agregar otro sexo", key="others_add_vict_row"):
                 usados = {r["sexo"] for r in st.session_state.others_vict_rows if "sexo" in r}
@@ -198,11 +212,12 @@ def render(excel_path: str, fila: int, delito_x3: str) -> None:
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Volver ⬅️", key="others_volver"):
-                st.session_state.step = 6
+                # ⬅️ ARREGLADO: volver a Direcciones (step 5) en lugar de step 6
+                st.session_state.step = 5
                 st.rerun()
         with col2:
             if st.button("Guardar y continuar ➡️", key="others_guardar"):
-                # Validaciones
+                # Validaciones (idénticas a las tuyas)
                 if total_vict < 1:
                     st.warning("Debe indicar al menos 1 víctima.")
                     st.stop()
@@ -216,18 +231,9 @@ def render(excel_path: str, fila: int, delito_x3: str) -> None:
                     st.warning("Debe consignar si APARECIÓ (BA).")
                     st.stop()
 
-                # Guardado
+                # (DIFERIDO) No escribir en Excel acá — solo armar preview y avanzar
                 try:
-                    wb = cargar_libro(excel_path)
-                    ws = wb.active
-
-                    # Limpiar AO/AG/AH/AI por seguridad
-                    ws[C("AO")].value = None
-                    ws[C("AG")].value = None
-                    ws[C("AH")].value = None
-                    ws[C("AI")].value = None
-
-                    # Acumular por sexo
+                    # Acumular por sexo para el total (AO)
                     total_m = total_f = total_nc = 0
                     for r in st.session_state.others_vict_rows:
                         sexo = (r.get("sexo") or "").strip()
@@ -241,21 +247,7 @@ def render(excel_path: str, fila: int, delito_x3: str) -> None:
                             total_f += c
                         elif sexo == "NO CONSTA":
                             total_nc += c
-
                     ao_total = total_m + total_f + total_nc
-                    ws[C("AO")].value = ao_total if ao_total else None
-                    if total_m: ws[C("AG")].value = total_m
-                    if total_f: ws[C("AH")].value = total_f
-                    if total_nc: ws[C("AI")].value = total_nc
-
-                    # AP (Vulnerabilidad)
-                    ws[C("AP")].value = unwrap_quotes(_trim(vulnerab_sel))
-
-                    # BA (Apareció) si corresponde
-                    if delito_norm == DELITO_DESAPARICION:
-                        ws[C("BA")].value = unwrap_quotes(_trim(aparecio_sel))
-
-                    wb.save(excel_path)
 
                     # Preview para el resumen del paso 6
                     st.session_state.others_preview = {
@@ -265,8 +257,7 @@ def render(excel_path: str, fila: int, delito_x3: str) -> None:
                         "aparecio": (aparecio_sel if delito_norm == DELITO_DESAPARICION else None),
                     }
 
-                    # Fin subflujo
-                    st.session_state.others_step = 1
+                    # Fin subflujo (sin borrar listas ni step, así “Atrás” conserva todo)
                     st.session_state.others_done = True
                     st.session_state.step = 6
                     st.rerun()

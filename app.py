@@ -154,6 +154,7 @@ def _init_state():
     d.setdefault("rh_preview", None)       # resumen Robos/Hurtos
     d.setdefault("others_done", False)
     d.setdefault("others_preview", None)   # resumen Otros (Lesiones/Desap)
+    d.setdefault("direcciones_preview", None)  # resumen Direcciones
 
 _init_state()
 
@@ -230,6 +231,7 @@ if st.session_state.step == 1:
             st.session_state.rh_preview = None
             st.session_state.others_done = False
             st.session_state.others_preview = None
+            st.session_state.direcciones_preview = None
 
             st.session_state.step = 2
             st.rerun()
@@ -340,6 +342,21 @@ elif st.session_state.step == 3:
             if not denunciante or denunciante.strip() == "":
                 st.warning("Por favor, ingrese el nombre y apellido del denunciante o víctima.")
                 st.stop()
+
+            # NUEVO: si cambió el delito, limpiar previews/flags/caches de subflujos
+            prev_delito_norm = (st.session_state.delito or "").strip() if st.session_state.get("delito") else None
+            nuevo_delito_norm = (delito or "").strip()
+            if prev_delito_norm and prev_delito_norm != nuevo_delito_norm:
+                # Robos/Hurtos
+                for k in ("rh_done", "rh_preview", "rh_cache", "rh_vict_rows", "rh_sex_rows"):
+                    if k in st.session_state:
+                        del st.session_state[k]
+                # Otros
+                for k in ("others_done", "others_preview", "others_vict_rows"):
+                    if k in st.session_state:
+                        del st.session_state[k]
+                # Direcciones NO se toca
+
             st.session_state.delito = delito
             st.session_state.denunciante = denunciante
             st.session_state.motivo = motivo_sel
@@ -434,25 +451,11 @@ elif st.session_state.step == 5:
     # La función interna maneja volver (step=4) y continuar (step=6).
 
 elif st.session_state.step == 6:
-    # --- Subflujo: Lesiones / Desaparición de Persona (otros.py) ---
-    delitos_otros = {
-        "LESIONES GRAVES", "LESIONES LEVES", "LESIONES GRAVISIMAS",
-        "DESAPARICION DE PERSONA",
-        "ABUSO DE ARMAS CON LESIONES",
-        "ABUSO DE ARMAS SIN LESIONES",
-        "ABUSO SEXUAL CON ACCESO CARNAL (VIOLACION)",
-        "ABUSO SEXUAL SIMPLE",
-    }
-    delito_norm_otros = (st.session_state.delito or "").strip()
-    if (delito_norm_otros in delitos_otros) and not st.session_state.get("others_done", False):
-        otros.render(
-            excel_path=st.session_state.excel_path,
-            fila=st.session_state.fila,
-            delito_x3=st.session_state.delito
-        )
-        st.stop()
+    # ===========================
+    # NUEVO: normalizar y limpiar previews que no correspondan al delito actual
+    # ===========================
+    delito_now_norm = (st.session_state.delito or "").strip()
 
-    # --- Subflujo: Robos / Hurtos (Robos_Hurtos.py) ---
     delitos_rh = {
         "ROBO SIMPLE ",
         "HURTO SIMPLE ",
@@ -461,7 +464,38 @@ elif st.session_state.step == 6:
         "ROBO ABIGEATO ",
         "ROBO AGRAVADO POR LESION ",
     }
-    if ((st.session_state.delito in delitos_rh) or ((st.session_state.delito or "").strip() in {d.strip() for d in delitos_rh})) \
+    delitos_rh_norm = {d.strip() for d in delitos_rh}
+
+    delitos_otros = {
+        "LESIONES GRAVES", "LESIONES LEVES", "LESIONES GRAVISIMAS",
+        "DESAPARICION DE PERSONA",
+        "ABUSO DE ARMAS CON LESIONES",
+        "ABUSO DE ARMAS SIN LESIONES",
+        "ABUSO SEXUAL CON ACCESO CARNAL (VIOLACION)",
+        "ABUSO SEXUAL SIMPLE",
+    }
+    delitos_otros_norm = {d.strip() for d in delitos_otros}
+
+    # Si hay previews de un subflujo que ya no aplica, descartarlos
+    if st.session_state.get("rh_preview") and (delito_now_norm not in delitos_rh_norm):
+        st.session_state.rh_preview = None
+        st.session_state.rh_done = False
+
+    if st.session_state.get("others_preview") and (delito_now_norm not in delitos_otros_norm):
+        st.session_state.others_preview = None
+        st.session_state.others_done = False
+
+    # --- Subflujo: Lesiones / Desaparición de Persona (otros.py) ---
+    if (delito_now_norm in delitos_otros_norm) and not st.session_state.get("others_done", False):
+        otros.render(
+            excel_path=st.session_state.excel_path,
+            fila=st.session_state.fila,
+            delito_x3=st.session_state.delito
+        )
+        st.stop()
+
+    # --- Subflujo: Robos / Hurtos (Robos_Hurtos.py) ---
+    if ((st.session_state.delito in delitos_rh) or (delito_now_norm in delitos_rh_norm)) \
        and not st.session_state.get("rh_done", False):
         Robos_Hurtos.render(
             excel_path=st.session_state.excel_path,
@@ -488,9 +522,9 @@ elif st.session_state.step == 6:
     st.write(f"- Denunciante/Víctima: {st.session_state.denunciante}")
     st.write(f"- Motivo: {st.session_state.motivo}")
 
-    # Bloque Lesiones / Desaparición (si hay)
+    # Bloque Lesiones / Desaparición (si hay y corresponde al delito actual)
     otros_preview = st.session_state.get("others_preview")
-    if otros_preview:
+    if otros_preview and ((st.session_state.delito or "").strip() in delitos_otros_norm):
         st.markdown("---")
         st.markdown("**Datos adicionales (Lesiones / Desaparición)**")
         vict_rows_o = otros_preview.get("vict_rows") or []
@@ -508,9 +542,9 @@ elif st.session_state.step == 6:
             st.session_state.others_done = False
             st.rerun()
 
-    # Bloque Robos/Hurtos (si hay)
+    # Bloque Robos/Hurtos (si hay y corresponde al delito actual)
     rh_preview = st.session_state.get("rh_preview")
-    if rh_preview:
+    if rh_preview and ((st.session_state.delito or "").strip() in delitos_rh_norm):
         st.markdown("---")
         st.markdown("**Datos adicionales (Robos/Hurtos)**")
         # Víctimas
@@ -564,10 +598,10 @@ elif st.session_state.step == 6:
     with col1:
         if st.button("Atrás"):
             # Reabrir subflujos si ya fueron completados
-            if (delito_norm_otros in delitos_otros) and st.session_state.get("others_done", False):
+            if (delito_now_norm in delitos_otros_norm) and st.session_state.get("others_done", False):
                 st.session_state.others_done = False
                 st.rerun()
-            elif ((st.session_state.delito in delitos_rh) or ((st.session_state.delito or "").strip() in {d.strip() for d in delitos_rh})) \
+            elif ((st.session_state.delito in delitos_rh) or (delito_now_norm in delitos_rh_norm)) \
                  and st.session_state.get("rh_done", False):
                 st.session_state.rh_done = False
                 st.rerun()
@@ -583,6 +617,193 @@ elif st.session_state.step == 6:
             fecha_hecho_txt = fecha_a_texto_curvo(st.session_state.fecha_hecho) if st.session_state.fecha_hecho else None
             hora_hecho_txt = st.session_state.hora_hecho or "INDETERMINADO"
             hora_fin_txt   = st.session_state.hora_fin or "INDETERMINADO"
+
+            # === Guardado diferido de Direcciones (si hay preview) ===
+            dprev = st.session_state.get("direcciones_preview")
+            if dprev:
+                try:
+                    wb_dir = cargar_libro(st.session_state.excel_path)
+                    ws_dir = wb_dir.active
+                    C = lambda col: f"{col}{fila}"
+
+                    # I{fila}: ciudad/código según comisaría
+                    cc = dprev.get("ciudad_cod")
+                    if cc not in (None, ""):
+                        ws_dir[C("I")].value = unwrap_quotes(str(cc))
+
+                    # J{fila}: barrio (si 'OTRO', además guarda el texto en K{fila})
+                    b = dprev.get("barrio")
+                    if b not in (None, ""):
+                        ws_dir[C("J")].value = unwrap_quotes(str(b))
+                    ob = dprev.get("otro_barrio") or ""
+                    if (b == "OTRO") and ob.strip():
+                        ws_dir[C("K")].value = unwrap_quotes(ob.strip())
+
+                    # L{fila}: dirección ; M{fila}: altura
+                    dir_txt = dprev.get("direccion")
+                    if dir_txt not in (None, ""):
+                        ws_dir[C("L")].value = unwrap_quotes(str(dir_txt))
+                    alt_txt = dprev.get("altura")
+                    if alt_txt not in (None, ""):
+                        ws_dir[C("M")].value = unwrap_quotes(str(alt_txt))
+
+                    # N{fila}: link de Google Maps (obligatorio)
+                    link = (dprev.get("link_maps") or "").strip()
+                    if link:
+                        ws_dir[C("N")].value = unwrap_quotes(link)
+
+                    wb_dir.save(st.session_state.excel_path)
+
+                except PermissionError:
+                    st.error("⚠️ No se pudo guardar Direcciones: el archivo está abierto en Excel.")
+                    st.stop()
+                except Exception as e:
+                    st.error(f"⚠️ Error al guardar Direcciones: {e}")
+                    st.stop()
+
+            # === Guardado diferido de Robos/Hurtos (si hay preview y aplica) ===
+            rh_preview = st.session_state.get("rh_preview")
+            if rh_preview and ((st.session_state.delito or "").strip() in delitos_rh_norm):
+                try:
+                    wb_rh = cargar_libro(st.session_state.excel_path)
+                    ws_rh = wb_rh.active
+                    C = lambda col: f"{col}{fila}"
+
+                    # -------- Víctimas (AO total) + por sexo (AG/AH/AI)
+                    total_m = total_f = total_nc = 0
+                    for r in (rh_preview.get("vict_rows") or []):
+                        sexo = (r.get("sexo") or "").strip()
+                        try:
+                            c = int(str(r.get("cant") or "0").strip())
+                        except Exception:
+                            c = 0
+                        if sexo == "MASCULINO": total_m += c
+                        elif sexo == "FEMENINO": total_f += c
+                        elif sexo == "NO CONSTA": total_nc += c
+                    ao_total = total_m + total_f + total_nc
+                    ws_rh[C("AO")].value = ao_total if ao_total else None
+                    if total_m: ws_rh[C("AG")].value = total_m
+                    if total_f: ws_rh[C("AH")].value = total_f
+                    if total_nc: ws_rh[C("AI")].value = total_nc
+
+                    # -------- Vulnerabilidad (AP) y Tipo de arma (AR)
+                    v = rh_preview.get("vulnerab")
+                    if v not in (None, ""): ws_rh[C("AP")].value = unwrap_quotes(str(v).strip())
+                    ta = rh_preview.get("tipo_arma")
+                    if ta not in (None, ""): ws_rh[C("AR")].value = unwrap_quotes(str(ta).strip())
+
+                    # -------- Inculpados: SI/NO (AS) + rango (AW/AX/AY/AZ) + sexo (AT/AU/AV)
+                    inc_sn = (rh_preview.get("inc_sn") or "").strip()
+                    if inc_sn: ws_rh[C("AS")].value = unwrap_quotes(inc_sn)
+                    if inc_sn == "SI":
+                        rango = rh_preview.get("rango_etario")
+                        cant_rango = rh_preview.get("cant_rango")
+                        if rango and str(cant_rango).strip() != "":
+                            try:
+                                cant_num = int(str(cant_rango).strip())
+                            except Exception:
+                                cant_num = 0
+                            if   rango == "Hasta 15 año":     ws_rh[C("AW")].value = cant_num
+                            elif rango == "15 a 17 años":     ws_rh[C("AX")].value = cant_num
+                            elif rango == "mayor de 18 años": ws_rh[C("AY")].value = cant_num
+                            elif rango == "Sin Determinar":   ws_rh[C("AZ")].value = cant_num
+                        # Distribución por sexo de inculpados
+                        t_m = t_f = t_nc = 0
+                        for r in (rh_preview.get("sex_rows") or []):
+                            sx = (r.get("sexo") or "").strip()
+                            try:
+                                c = int(str(r.get("cant") or "0").strip())
+                            except Exception:
+                                c = 0
+                            if sx == "MASCULINO": t_m += c
+                            elif sx == "FEMENINO": t_f += c
+                            elif sx == "NO CONSTA": t_nc += c
+                        if t_m: ws_rh[C("AT")].value = t_m
+                        if t_f: ws_rh[C("AU")].value = t_f
+                        if t_nc: ws_rh[C("AV")].value = t_nc
+
+                    # -------- Tipo de lugar (AD) + Detalle establecimiento (AE)
+                    tl = rh_preview.get("tipo_lugar")
+                    if tl not in (None, ""): ws_rh[C("AD")].value = unwrap_quotes(str(tl).strip())
+                    de = rh_preview.get("detalle_est")
+                    if de not in (None, ""): ws_rh[C("AE")].value = unwrap_quotes(str(de).strip())
+
+                    # -------- Elementos (BB) + Subcat (BC) + Denom (BD) + Año (BE) + Modelo (BF)
+                    el = rh_preview.get("elem")
+                    if el not in (None, ""): ws_rh[C("BB")].value = unwrap_quotes(str(el).strip())
+                    sc = rh_preview.get("subcat")
+                    if sc not in (None, ""): ws_rh[C("BC")].value = unwrap_quotes(str(sc).strip())
+                    dn = rh_preview.get("denom")
+                    if dn not in (None, ""): ws_rh[C("BD")].value = unwrap_quotes(str(dn).strip())
+                    if el in ("AUTOMOTOR", "MOTOCICLETA"):
+                        an = rh_preview.get("anio")
+                        md = rh_preview.get("modelo")
+                        if an not in (None, ""): ws_rh[C("BE")].value = unwrap_quotes(str(an).strip())
+                        if md not in (None, ""): ws_rh[C("BF")].value = unwrap_quotes(str(md).strip())
+
+                    # -------- Modus (BJ) + Especialidad (BK)
+                    mo = rh_preview.get("modus")
+                    if mo not in (None, ""): ws_rh[C("BJ")].value = unwrap_quotes(str(mo).strip())
+                    es = rh_preview.get("especialidad")
+                    if es not in (None, ""): ws_rh[C("BK")].value = unwrap_quotes(str(es).strip())
+
+                    wb_rh.save(st.session_state.excel_path)
+
+                except PermissionError:
+                    st.error("⚠️ No se pudo guardar Robos/Hurtos: el archivo está abierto en Excel.")
+                    st.stop()
+                except Exception as e:
+                    st.error(f"⚠️ Error al guardar datos de Robos/Hurtos: {e}")
+                    st.stop()
+
+            # === Guardado diferido de Otros (si hay preview y aplica) ===
+            oprev = st.session_state.get("others_preview")
+            if oprev and ((st.session_state.delito or "").strip() in delitos_otros_norm):
+                try:
+                    wb_o = cargar_libro(st.session_state.excel_path)
+                    ws_o = wb_o.active
+                    C = lambda col: f"{col}{fila}"
+
+                    # Limpiar AO/AG/AH/AI por seguridad (si reescriben tras editar)
+                    ws_o[C("AO")].value = None
+                    ws_o[C("AG")].value = None
+                    ws_o[C("AH")].value = None
+                    ws_o[C("AI")].value = None
+
+                    # Acumular por sexo (AG/AH/AI) y total (AO)
+                    total_m = total_f = total_nc = 0
+                    for r in (oprev.get("vict_rows") or []):
+                        sexo = (r.get("sexo") or "").strip()
+                        try:
+                            c = int(str(r.get("cant") or "0").strip())
+                        except Exception:
+                            c = 0
+                        if sexo == "MASCULINO": total_m += c
+                        elif sexo == "FEMENINO": total_f += c
+                        elif sexo == "NO CONSTA": total_nc += c
+                    ao_total = total_m + total_f + total_nc
+                    ws_o[C("AO")].value = ao_total if ao_total else None
+                    if total_m: ws_o[C("AG")].value = total_m
+                    if total_f: ws_o[C("AH")].value = total_f
+                    if total_nc: ws_o[C("AI")].value = total_nc
+
+                    # AP Vulnerabilidad
+                    vul = oprev.get("vulnerabilidad")
+                    if vul not in (None, ""):
+                        ws_o[C("AP")].value = unwrap_quotes(str(vul).strip())
+
+                    # BA ¿Apareció? solo si corresponde (Desaparición)
+                    if oprev.get("aparecio") is not None:
+                        ws_o[C("BA")].value = unwrap_quotes(str(oprev.get("aparecio")).strip())
+
+                    wb_o.save(st.session_state.excel_path)
+
+                except PermissionError:
+                    st.error("⚠️ No se pudo guardar Otros: el archivo está abierto en Excel.")
+                    st.stop()
+                except Exception as e:
+                    st.error(f"⚠️ Error al guardar Otros: {e}")
+                    st.stop()
 
             ok = escribir_registro(
                 st.session_state.excel_path,
@@ -618,6 +839,7 @@ elif st.session_state.step == 6:
                 st.session_state.rh_preview = None
                 st.session_state.others_done = False
                 st.session_state.others_preview = None
+                st.session_state.direcciones_preview = None
                 st.rerun()
             else:
                 st.error("Hubo un problema al guardar. Revise el mensaje de error arriba.")

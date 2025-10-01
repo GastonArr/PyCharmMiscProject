@@ -28,21 +28,20 @@ def unwrap_quotes(v):
         return v[1:-1]
     return v
 
-# ===== Lógica de direcciones (UI + guardado + navegación) =====
+# ===== Lógica de direcciones (UI, navegación, guardado diferido) =====
 def render_direcciones_ui(excel_path: str, fila: int, comisaria: str) -> None:
     """
     Pantalla de direcciones integrada al flujo principal (usa st.session_state.step).
-    Guardados:
-      - I{fila}: 'CUTRAL_CO' si comisaría 14/15; 'PLAZA_HUINCUL' si comisaría 6
-      - J{fila}: barrio (lista según comisaría)
-      - K{fila}: texto del barrio si se eligió 'OTRO'
-      - L{fila}: dirección (textbox 30)
-      - M{fila}: altura (textbox 30)
-      - N{fila}: link de Google Maps (obligatorio, hasta 500 caracteres)
-    No cambia formatos ni macros. Maneja Volver/Siguiente internamente.
+
+    NO escribe en Excel acá. Solo valida y guarda un preview en:
+        st.session_state.direcciones_preview = {
+            "ciudad_cod", "barrio", "otro_barrio", "direccion", "altura", "link_maps"
+        }
+    Esos campos se vuelcan en app.py al presionar “Finalizar y guardar ✅”:
+        I=ciudad_cod, J=barrio, K=otro_barrio (si 'OTRO'), L=direccion, M=altura, N=link_maps
     """
 
-    # 1) Lista de barrios según comisaría
+    # 1) Lista de barrios según comisaría (sin cambiar tus listas)
     barrios_1415 = [
         "PARQUE INDUSTRIAL","PARQUE OESTE","PARQUE ESTE","FILLI DEI","ZANI","SAN MARTIN",
         "AEROPARQUE","COOPERATIVA","D. SAEZ","PAMPA","CENTRO","RUCA QUIMEY","NEUQUEN CHE",
@@ -61,26 +60,59 @@ def render_direcciones_ui(excel_path: str, fila: int, comisaria: str) -> None:
         lista_barrios = barrios_6
         ciudad_cod = "PLAZA_HUINCUL"
 
-    # Barrio
-    barrio = st.selectbox("Ingrese el barrio", lista_barrios, key="dir_barrio_select")
+    # === Precargar widgets desde el preview si existen (no pisa lo recién tipeado) ===
+    ss = st.session_state
+    dprev = ss.get("direcciones_preview") or {}
 
+    def seed(k, v):
+        if v not in (None, "") and k not in ss:
+            ss[k] = v
+
+    seed("dir_barrio_select", dprev.get("barrio"))
+    seed("dir_otro_barrio", dprev.get("otro_barrio"))
+    seed("dir_direccion", dprev.get("direccion"))
+    seed("dir_altura", dprev.get("altura"))
+    seed("dir_link_maps", dprev.get("link_maps"))
+
+    # Barrio (usar index en base al valor ya guardado)
+    barrio_val = ss.get("dir_barrio_select")
+    idx_barrio = lista_barrios.index(barrio_val) if barrio_val in lista_barrios else 0
+    barrio = st.selectbox("Ingrese el barrio", lista_barrios, index=idx_barrio, key="dir_barrio_select")
+
+    # “OTRO” barrio (con valor precargado si corresponde)
     otro_barrio = ""
     if barrio == "OTRO":
-        otro_barrio = st.text_input("Especifique otro barrio (máx 15)", max_chars=15, key="dir_otro_barrio")
+        otro_barrio = st.text_input(
+            "Especifique otro barrio (máx 15)",
+            value=ss.get("dir_otro_barrio", ""),
+            max_chars=15,
+            key="dir_otro_barrio",
+        )
 
     st.markdown("---")
 
-    # 2) Dirección y altura
+    # 2) Dirección y altura (con valores precargados)
     col1, col2 = st.columns(2)
     with col1:
-        direccion = st.text_input("Ingrese la dirección (máx 30)", max_chars=30, key="dir_direccion")
+        direccion = st.text_input(
+            "Ingrese la dirección",
+            value=ss.get("dir_direccion", ""),
+            max_chars=70,
+            key="dir_direccion",
+        )
     with col2:
-        altura = st.text_input("Ingrese la altura (máx 30)", max_chars=30, key="dir_altura")
+        altura = st.text_input(
+            "Ingrese la altura",
+            value=ss.get("dir_altura", ""),
+            max_chars=70,
+            key="dir_altura",
+        )
 
-    # 2.b) Link de Google Maps (OBLIGATORIO)
+    # 2.b) Link de Google Maps (OBLIGATORIO, con valor precargado)
     st.markdown("---")
     link_maps = st.text_input(
         "ingresa a continuación el link de la página google maps donde se ubicó el punto geográfico de la dirección dada anteriormente.",
+        value=ss.get("dir_link_maps", ""),
         max_chars=500,
         key="dir_link_maps",
         placeholder="https://maps.google.com/..."
@@ -97,7 +129,7 @@ def render_direcciones_ui(excel_path: str, fila: int, comisaria: str) -> None:
 
     with colB:
         if st.button("Siguiente ➡️", key="dir_siguiente_btn"):
-            # Validaciones mínimas
+            # Validaciones mínimas (idénticas a las que tenías)
             if not barrio:
                 st.warning("Seleccione un barrio.")
                 st.stop()
@@ -115,27 +147,16 @@ def render_direcciones_ui(excel_path: str, fila: int, comisaria: str) -> None:
                 st.warning("Debe ingresar el link de Google Maps.")
                 st.stop()
 
-            # Guardado en Excel
+            # Guardado diferido: solo preview en session_state (NO Excel acá)
             try:
-                wb = cargar_libro(excel_path)
-                ws = wb.active
-
-                # I{fila}: ciudad/código según comisaría
-                ws[f"I{fila}"].value = ciudad_cod
-
-                # J{fila}: barrio (si 'OTRO', además guarda el texto en K{fila})
-                ws[f"J{fila}"].value = unwrap_quotes(barrio)
-                if barrio == "OTRO":
-                    ws[f"K{fila}"].value = unwrap_quotes(otro_barrio)
-
-                # L{fila}: dirección ; M{fila}: altura
-                ws[f"L{fila}"].value = unwrap_quotes(direccion)
-                ws[f"M{fila}"].value = unwrap_quotes(altura)
-
-                # N{fila}: link de Google Maps (obligatorio)
-                ws[f"N{fila}"].value = unwrap_quotes(link_maps.strip())
-
-                wb.save(excel_path)
+                st.session_state.direcciones_preview = {
+                    "ciudad_cod": ciudad_cod,
+                    "barrio": barrio,
+                    "otro_barrio": (otro_barrio or "") if barrio == "OTRO" else "",
+                    "direccion": direccion,
+                    "altura": altura,
+                    "link_maps": link_maps.strip(),
+                }
 
                 # Continuar con la app (Paso 6 en app.py: resumen + guardar)
                 st.session_state.step = 6

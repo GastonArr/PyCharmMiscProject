@@ -227,13 +227,68 @@ def render(excel_path: str, fila: int, delito_x3: str) -> None:
     if "rh_step" not in st.session_state:
         st.session_state.rh_step = 1
 
+    # === Precarga desde rh_preview/rh_cache para conservar datos al volver ===
+    ss = st.session_state
+    prev = ss.get("rh_preview") or {}
+    cache = ss.get("rh_cache") or {}
+
+    # Si no hay cache pero sí hay preview (volvés desde el Resumen), reconstruimos cache
+    if not cache and prev:
+        ss.rh_cache = {
+            "vict_rows": list(prev.get("vict_rows") or []),
+            "vict_total": prev.get("vict_total"),
+            "vulnerab": prev.get("vulnerab"),
+            "tipo_arma": prev.get("tipo_arma"),
+            "inc_sn": prev.get("inc_sn"),
+            "rango_etario": prev.get("rango_etario"),
+            "cant_rango": prev.get("cant_rango"),
+            "sex_rows": list(prev.get("sex_rows") or []),
+            "tipo_lugar": prev.get("tipo_lugar"),
+            "detalle_est": prev.get("detalle_est"),
+            "elem": prev.get("elem"),
+            "subcat": prev.get("subcat"),
+            "denom": prev.get("denom"),
+            "anio": prev.get("anio"),
+            "modelo": prev.get("modelo"),
+        }
+        cache = ss.rh_cache
+
+    # Sembrar listas dinámicas (víctimas / inculpados) si no están presentes
+    if ("rh_vict_rows" not in ss or not isinstance(ss.rh_vict_rows, list)) and (cache.get("vict_rows")):
+        ss.rh_vict_rows = list(cache.get("vict_rows"))
+    if ("rh_sex_rows" not in ss or not isinstance(ss.rh_sex_rows, list)) and (cache.get("sex_rows")):
+        ss.rh_sex_rows = list(cache.get("sex_rows"))
+
+    # Helper para no pisar lo que el usuario acaba de escribir
+    def seed(k, v):
+        if v not in (None, "") and k not in ss:
+            ss[k] = v
+
+    # Sembrar claves simples usadas por los widgets (Paso 1)
+    seed("rh_vulnerabilidad", cache.get("vulnerab"))
+    # Si NO es Hurto Simple, restauramos tipo de arma; para Hurto se forza SIN ARMAS más adelante
+    if (ss.get("delito") or delito_x3 or "").strip() != "HURTO SIMPLE":
+        seed("rh_tipo_arma", cache.get("tipo_arma"))
+    seed("rh_inc_sn", cache.get("inc_sn") or "NO")
+    seed("rh_inc_rango", cache.get("rango_etario"))
+    seed("rh_inc_cant_rango", cache.get("cant_rango"))
+    seed("rh_tipo_lugar", cache.get("tipo_lugar"))
+    seed("rh_detalle_est", cache.get("detalle_est"))
+    seed("rh_elemento", cache.get("elem"))
+    seed("rh_subcat", cache.get("subcat"))
+    seed("rh_denom", cache.get("denom"))
+    seed("rh_anio", cache.get("anio"))
+    seed("rh_modelo", cache.get("modelo"))
+    # Paso 2
+    seed("rh_modus", prev.get("modus"))
+    seed("rh_especialidad", prev.get("especialidad"))
+
     def C(col: str) -> str:
         return f"{col}{fila}"
 
     # =================== Paso 1: Datos generales ===================
     if st.session_state.rh_step == 1:
         st.subheader("Datos adicionales (Robos/Hurtos)")
-        # Mostrar hecho de referencia siempre
         mostrar_hecho_referencia()
 
         # ---------- Víctimas: distribución por sexo (dinámica) ----------
@@ -243,7 +298,6 @@ def render(excel_path: str, fila: int, delito_x3: str) -> None:
         if "rh_vict_rows" not in st.session_state or not isinstance(st.session_state.rh_vict_rows, list):
             st.session_state.rh_vict_rows = [{"sexo": "MASCULINO", "cant": "1"}]  # renglón inicial
 
-        # Render filas víctimas
         total_vict = 0
         vict_borrar = []
         for i, row in enumerate(st.session_state.rh_vict_rows):
@@ -263,7 +317,6 @@ def render(excel_path: str, fila: int, delito_x3: str) -> None:
                     key=f"rh_vict_rows_{i}_cant",
                 )
             with c3:
-                # Quitar SOLO a partir del segundo renglón
                 if i > 0:
                     if st.button("Quitar", key=f"rh_vict_rows_{i}_del"):
                         vict_borrar.append(i)
@@ -275,7 +328,6 @@ def render(excel_path: str, fila: int, delito_x3: str) -> None:
             st.session_state.rh_vict_rows = [r for j, r in enumerate(st.session_state.rh_vict_rows) if j not in vict_borrar]
             st.rerun()
 
-        # Botón agregar otro sexo (hasta 3 filas / y límite por total 10)
         if len(st.session_state.rh_vict_rows) < 3 and total_vict < 10:
             if st.button("Agregar otro sexo", key="rh_add_vict_row"):
                 usados = {r["sexo"] for r in st.session_state.rh_vict_rows if "sexo" in r}
@@ -305,7 +357,7 @@ def render(excel_path: str, fila: int, delito_x3: str) -> None:
             "es decir, quienes enfrentan imputaciones legales durante un procedimiento penal.",
             INCULPADOS_SN,
             horizontal=True,
-            index=0,  # deja NO seleccionado de entrada
+            index=0,
             key="rh_inc_sn",
         )
 
@@ -351,7 +403,6 @@ def render(excel_path: str, fila: int, delito_x3: str) -> None:
                         key=f"rh_sex_rows_{i}_cant",
                     )
                 with c3:
-                    # Quitar SOLO a partir del segundo renglón
                     if i > 0:
                         if st.button("Quitar", key=f"rh_sex_rows_{i}_del"):
                             inc_borrar.append(i)
@@ -363,7 +414,6 @@ def render(excel_path: str, fila: int, delito_x3: str) -> None:
                 st.session_state.rh_sex_rows = [r for j, r in enumerate(st.session_state.rh_sex_rows) if j not in inc_borrar]
                 st.rerun()
 
-            # Agregar otro sexo (máx 3 filas) y opcionalmente limitar por objetivo
             try:
                 objetivo_inc = int(cant_rango) if cant_rango else 0
             except Exception:
@@ -383,7 +433,7 @@ def render(excel_path: str, fila: int, delito_x3: str) -> None:
 
         st.markdown("---")
 
-        # --- TIPO DE LUGAR (Hurto Simple no habilita transporte)  ── (comportamiento restaurado)
+        # --- TIPO DE LUGAR (Hurto Simple no habilita transporte)
         opciones_tipo_lugar = list(TIPO_LUGAR_BASE)
         if delito_norm == "HURTO SIMPLE":
             opciones_tipo_lugar = [x for x in opciones_tipo_lugar if x != "EN TRANSPORTE (SOLO ABIGEATO)"]
@@ -422,9 +472,13 @@ def render(excel_path: str, fila: int, delito_x3: str) -> None:
         if elem in ("AUTOMOTOR", "MOTOCICLETA"):
             colA, colB = st.columns(2)
             with colA:
-                anio = st.text_input("AÑO (4 dígitos)", max_chars=4, key="rh_anio")
+                anio = st.text_input("AÑO (4 dígitos)",
+                                     value=st.session_state.get("rh_anio", ""),
+                                     max_chars=4, key="rh_anio")
             with colB:
-                modelo = st.text_input("MODELO (máx 20)", max_chars=20, key="rh_modelo")
+                modelo = st.text_input("MODELO (máx 20)",
+                                       value=st.session_state.get("rh_modelo", ""),
+                                       max_chars=20, key="rh_modelo")
         else:
             st.caption("AÑO / MODELO: (no aplica)")
 
@@ -436,7 +490,7 @@ def render(excel_path: str, fila: int, delito_x3: str) -> None:
                 st.rerun()
         with col2:
             if st.button("Siguiente ➡️", key="rh_siguiente_1"):
-                # Validaciones mínimas
+                # Validaciones mínimas (tuyas, intactas)
 
                 # Víctimas: total obligatorio entre 1 y 10
                 total_vict = sum(int(r.get("cant", "0") or "0") for r in st.session_state.rh_vict_rows)
@@ -469,10 +523,8 @@ def render(excel_path: str, fila: int, delito_x3: str) -> None:
 
                 # Cache y avanzar
                 st.session_state.rh_cache = {
-                    # Víctimas
                     "vict_rows": list(st.session_state.rh_vict_rows),
                     "vict_total": str(total_vict),
-                    # Otros
                     "vulnerab": vulnerab,
                     "tipo_arma": tipo_arma,
                     "inc_sn": inc_sn,
@@ -520,113 +572,7 @@ def render(excel_path: str, fila: int, delito_x3: str) -> None:
         with col2:
             if st.button("Guardar y continuar ➡️", key="rh_guardar"):
                 try:
-                    wb = cargar_libro(excel_path)
-                    ws = wb.active
-
-                    # Limpieza preventiva
-                    for col in ("AG","AH","AI"):  # sexo víctima
-                        ws[C(col)].value = None
-                    for col in ("AW","AX","AY","AZ"):  # rangos etarios inculpados
-                        ws[C(col)].value = None
-                    for col in ("AT","AU","AV"):  # distribución sexo inculpados
-                        ws[C(col)].value = None
-                    for col in ("AE","BC","BD","BE","BF","BK"):  # detalle, subcat, denom, año, modelo, especialidad
-                        ws[C(col)].value = None
-
-                    # ----- Víctimas: AO + AG/AH/AI (acumulado por sexo) -----
-                    vict_rows = cache.get("vict_rows", [])
-                    total_m = total_f = total_nc = 0
-                    for r in vict_rows:
-                        sexo = (r.get("sexo") or "").strip()
-                        try:
-                            c = int(r.get("cant") or "0")
-                        except Exception:
-                            c = 0
-                        if sexo == "MASCULINO":
-                            total_m += c
-                        elif sexo == "FEMENINO":
-                            total_f += c
-                        elif sexo == "NO CONSTA":
-                            total_nc += c
-                    ao_total = total_m + total_f + total_nc
-                    ws[C("AO")].value = ao_total if ao_total else None
-                    if total_m: ws[C("AG")].value = total_m
-                    if total_f: ws[C("AH")].value = total_f
-                    if total_nc: ws[C("AI")].value = total_nc
-
-                    # Vulnerabilidad (AP)
-                    ws[C("AP")].value = unwrap_quotes(_trim(cache.get("vulnerab")))
-
-                    # Tipo de arma (AR)
-                    ws[C("AR")].value = unwrap_quotes(_trim(cache.get("tipo_arma")))
-
-                    # Inculpados (AS) + rangos + sexo
-                    inc_sn = cache.get("inc_sn")
-                    ws[C("AS")].value = unwrap_quotes(_trim(inc_sn))
-
-                    if inc_sn == "SI":
-                        # Rango etario y cantidad (AW/AX/AY/AZ)
-                        rango = cache.get("rango_etario")
-                        cant_rango = cache.get("cant_rango")
-                        if rango and cant_rango:
-                            cant_num = int(cant_rango)
-                            if rango == "Hasta 15 año":
-                                ws[C("AW")].value = cant_num
-                            elif rango == "15 a 17 años":
-                                ws[C("AX")].value = cant_num
-                            elif rango == "mayor de 18 años":
-                                ws[C("AY")].value = cant_num
-                            elif rango == "Sin Determinar":
-                                ws[C("AZ")].value = cant_num
-
-                        # Distribución por sexo de inculpados (AT/AU/AV)
-                        t_m = t_f = t_nc = 0
-                        for r in cache.get("sex_rows", []):
-                            sexo = (r.get("sexo") or "").strip()
-                            try:
-                                c = int(r.get("cant") or "0")
-                            except Exception:
-                                c = 0
-                            if sexo == "MASCULINO":
-                                t_m += c
-                            elif sexo == "FEMENINO":
-                                t_f += c
-                            elif sexo == "NO CONSTA":
-                                t_nc += c
-                        if t_m: ws[C("AT")].value = t_m
-                        if t_f: ws[C("AU")].value = t_f
-                        if t_nc: ws[C("AV")].value = t_nc
-
-                    # Tipo de lugar (AD) + detalle (AE si aplica)
-                    ws[C("AD")].value = unwrap_quotes(_trim(cache.get("tipo_lugar")))
-                    if cache.get("detalle_est"):
-                        ws[C("AE")].value = unwrap_quotes(_trim(cache.get("detalle_est")))
-
-                    # Elementos sustraídos (BB)
-                    ws[C("BB")].value = unwrap_quotes(_trim(cache.get("elem")))
-
-                    # Subcategoría (BC) y Denominación (BD) si corresponde
-                    if cache.get("subcat"):
-                        ws[C("BC")].value = unwrap_quotes(_trim(cache.get("subcat")))
-                        if cache.get("denom"):
-                            ws[C("BD")].value = unwrap_quotes(_trim(cache.get("denom")))
-
-                    # Año (BE) y Modelo (BF) si aplica
-                    if cache.get("elem") in ("AUTOMOTOR", "MOTOCICLETA"):
-                        if cache.get("anio"):
-                            ws[C("BE")].value = unwrap_quotes(_trim(cache.get("anio")))
-                        if cache.get("modelo"):
-                            ws[C("BF")].value = unwrap_quotes(_trim(cache.get("modelo")))
-
-                    # Modus (BJ) + Especialidad (BK si aplica)
-                    ws[C("BJ")].value = unwrap_quotes(_trim(modus))
-                    if especialidad:
-                        ws[C("BK")].value = unwrap_quotes(_trim(especialidad))
-
-                    # Guardar una sola vez
-                    wb.save(excel_path)
-
-                    # === Resumen para vista previa en app.py ===
+                    # ⛔️ SIN guardar en Excel acá. Solo armamos el preview y avanzamos.
                     rh_preview = {
                         "vict_rows": cache.get("vict_rows"),
                         "vict_total": cache.get("vict_total"),
@@ -648,9 +594,7 @@ def render(excel_path: str, fila: int, delito_x3: str) -> None:
                     }
                     st.session_state.rh_preview = rh_preview
 
-                    # Fin subflujo
-                    st.session_state.rh_step = 1
-                    st.session_state.pop("rh_cache", None)
+                    # ✅ No borramos rh_cache ni reseteamos rh_step → memoria al volver atrás
                     st.session_state.rh_done = True
                     st.session_state.step = 6
                     st.rerun()
