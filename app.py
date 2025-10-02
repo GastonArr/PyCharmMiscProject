@@ -190,7 +190,7 @@ if st.session_state.step == 1:
     excel_path_preview = excel_path_por_comisaria(comisaria)
     asegurar_excel(excel_path_preview)
     fila_objetivo = obtener_siguiente_fila_por_fecha(excel_path_preview, col_fecha="C")
-    planilla_llena = fila_objetivo >= 102
+    planilla_llena = fila_objetivo >= 103
 
     if planilla_llena:
         st.error("PLANILLA COMPLETA POR FAVOR RENUEVE.")
