@@ -17,6 +17,9 @@ os.makedirs(EXCEL_DIR, exist_ok=True)
 excel_base_comisaria_14 = os.path.join(EXCEL_DIR, "comisaria 14")
 excel_base_comisaria_15 = os.path.join(EXCEL_DIR, "comisaria 15")
 excel_base_comisaria_6  = os.path.join(EXCEL_DIR, "comisaria 6")
+excel_base_comisaria_42 = os.path.join(EXCEL_DIR, "comisaria 42")
+excel_base_comisaria_9  = os.path.join(EXCEL_DIR, "comisaria 9")
+excel_base_cenaf_4      = os.path.join(EXCEL_DIR, "CENAF 4")
 
 # ---------------------------
 # Utilidades
@@ -125,8 +128,14 @@ def excel_path_por_comisaria(nombre_comisaria: str) -> str:
         base = excel_base_comisaria_14
     elif nombre_comisaria == "Comisaria 15":
         base = excel_base_comisaria_15
-    else:
+    elif nombre_comisaria == "Comisaria 6":
         base = excel_base_comisaria_6
+    elif nombre_comisaria == "Comisaria 42":
+        base = excel_base_comisaria_42
+    elif nombre_comisaria == "Comisaria 9":
+        base = excel_base_comisaria_9
+    else:  # "CENAF 4"
+        base = excel_base_cenaf_4
     return resolve_excel_path(base)
 
 # ---------------------------
@@ -168,16 +177,28 @@ if st.session_state.step == 1:
 
     comisaria = st.selectbox(
         "Seleccione la comisaría",
-        ["Comisaria 14", "Comisaria 15", "Comisaria 6"]
+        [
+            "Comisaria 14",
+            "Comisaria 15",
+            "Comisaria 6",
+            "Comisaria 42",
+            "Comisaria 9",
+            "CENAF 4",
+        ]
     )
+
+    excel_path_preview = excel_path_por_comisaria(comisaria)
+    asegurar_excel(excel_path_preview)
+    fila_objetivo = obtener_siguiente_fila_por_fecha(excel_path_preview, col_fecha="C")
+    planilla_llena = fila_objetivo >= 103
+
+    if planilla_llena:
+        st.error("PLANILLA COMPLETA POR FAVOR RENUEVE.")
 
     # --- Botón Descargar Excel + Uploader con validación de nombre ---
     col_dl, col_next = st.columns([1,1])
 
     with col_dl:
-        excel_path_preview = excel_path_por_comisaria(comisaria)
-        asegurar_excel(excel_path_preview)
-
         # Detectar MIME según extensión
         _ext = os.path.splitext(excel_path_preview)[1].lower()
         if _ext == ".xlsm":
@@ -222,19 +243,22 @@ if st.session_state.step == 1:
 
     with col_next:
         if st.button("Siguiente", use_container_width=True):
-            st.session_state.comisaria = comisaria
-            st.session_state.excel_path = excel_path_por_comisaria(comisaria)
-            st.session_state.fila = obtener_siguiente_fila_por_fecha(st.session_state.excel_path, col_fecha="C")
+            if planilla_llena:
+                st.error("PLANILLA COMPLETA POR FAVOR RENUEVE.")
+            else:
+                st.session_state.comisaria = comisaria
+                st.session_state.excel_path = excel_path_preview
+                st.session_state.fila = fila_objetivo
 
-            # reset subflujos
-            st.session_state.rh_done = False
-            st.session_state.rh_preview = None
-            st.session_state.others_done = False
-            st.session_state.others_preview = None
-            st.session_state.direcciones_preview = None
+                # reset subflujos
+                st.session_state.rh_done = False
+                st.session_state.rh_preview = None
+                st.session_state.others_done = False
+                st.session_state.others_preview = None
+                st.session_state.direcciones_preview = None
 
-            st.session_state.step = 2
-            st.rerun()
+                st.session_state.step = 2
+                st.rerun()
 
 elif st.session_state.step == 2:
     mostrar_hecho()
