@@ -251,6 +251,9 @@ if st.session_state.step == 1:
                 st.session_state.fila = fila_objetivo
 
                 # reset subflujos
+                for k in ("rh_cache", "rh_vict_rows", "rh_sex_rows", "rh_step"):
+                    st.session_state.pop(k, None)
+
                 st.session_state.rh_done = False
                 st.session_state.rh_preview = None
                 st.session_state.others_done = False
@@ -372,11 +375,11 @@ elif st.session_state.step == 3:
             nuevo_delito_norm = (delito or "").strip()
             if prev_delito_norm and prev_delito_norm != nuevo_delito_norm:
                 # Robos/Hurtos
-                for k in ("rh_done", "rh_preview", "rh_cache", "rh_vict_rows", "rh_sex_rows"):
+                for k in ("rh_done", "rh_preview", "rh_cache", "rh_vict_rows", "rh_sex_rows", "rh_step"):
                     if k in st.session_state:
                         del st.session_state[k]
                 # Otros
-                for k in ("others_done", "others_preview", "others_vict_rows"):
+                for k in ("others_done", "others_preview", "others_vict_rows", "others_step"):
                     if k in st.session_state:
                         del st.session_state[k]
                 # Direcciones NO se toca
@@ -504,6 +507,8 @@ elif st.session_state.step == 6:
     if st.session_state.get("rh_preview") and (delito_now_norm not in delitos_rh_norm):
         st.session_state.rh_preview = None
         st.session_state.rh_done = False
+        for k in ("rh_cache", "rh_vict_rows", "rh_sex_rows", "rh_step"):
+            st.session_state.pop(k, None)
 
     if st.session_state.get("others_preview") and (delito_now_norm not in delitos_otros_norm):
         st.session_state.others_preview = None
@@ -564,6 +569,7 @@ elif st.session_state.step == 6:
         # Botón para editar subflujo Otros
         if st.button("Editar Lesiones/Desaparición"):
             st.session_state.others_done = False
+            st.session_state.others_step = 1
             st.rerun()
 
     # Bloque Robos/Hurtos (si hay y corresponde al delito actual)
@@ -613,6 +619,7 @@ elif st.session_state.step == 6:
         # Botón para editar Robos/Hurtos
         if st.button("Editar Robos/Hurtos"):
             st.session_state.rh_done = False
+            st.session_state.rh_step = 1
             st.rerun()
 
     st.markdown("---")
@@ -624,10 +631,12 @@ elif st.session_state.step == 6:
             # Reabrir subflujos si ya fueron completados
             if (delito_now_norm in delitos_otros_norm) and st.session_state.get("others_done", False):
                 st.session_state.others_done = False
+                st.session_state.others_step = 1
                 st.rerun()
             elif ((st.session_state.delito in delitos_rh) or (delito_now_norm in delitos_rh_norm)) \
                  and st.session_state.get("rh_done", False):
                 st.session_state.rh_done = False
+                st.session_state.rh_step = 1
                 st.rerun()
             else:
                 st.session_state.step = 4
