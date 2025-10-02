@@ -53,8 +53,30 @@ def render_direcciones_ui(excel_path: str, fila: int, comisaria: str) -> None:
         "OTANO","PARUQE INDUSTRIAL","SOUFAL","UNIVERSITARIO","UNO","ZONA INDUSTRIAL","OTRO"
     ]
 
+    def combinar_listas_unicas(*listas):
+        vistos = set()
+        combinada = []
+        for lista in listas:
+            for item in lista:
+                if item not in vistos:
+                    combinada.append(item)
+                    vistos.add(item)
+        return combinada
+
+    barrios_cenaf_4 = combinar_listas_unicas(barrios_1415, barrios_6)
+    barrios_solo_otro = ["OTRO"]
+
     if comisaria in ("Comisaria 14", "Comisaria 15"):
         lista_barrios = barrios_1415
+        ciudad_cod = "CUTRAL_CO"
+    elif comisaria == "Comisaria 6":
+        lista_barrios = barrios_6
+        ciudad_cod = "PLAZA_HUINCUL"
+    elif comisaria == "CENAF 4":
+        lista_barrios = barrios_cenaf_4
+        ciudad_cod = "CUTRAL_CO"
+    elif comisaria in ("Comisaria 42", "Comisaria 9"):
+        lista_barrios = barrios_solo_otro
         ciudad_cod = "CUTRAL_CO"
     else:
         lista_barrios = barrios_6

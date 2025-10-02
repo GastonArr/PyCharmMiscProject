@@ -17,6 +17,9 @@ os.makedirs(EXCEL_DIR, exist_ok=True)
 excel_base_comisaria_14 = os.path.join(EXCEL_DIR, "comisaria 14")
 excel_base_comisaria_15 = os.path.join(EXCEL_DIR, "comisaria 15")
 excel_base_comisaria_6  = os.path.join(EXCEL_DIR, "comisaria 6")
+excel_base_comisaria_42 = os.path.join(EXCEL_DIR, "comisaria 42")
+excel_base_comisaria_9  = os.path.join(EXCEL_DIR, "comisaria 9")
+excel_base_cenaf_4      = os.path.join(EXCEL_DIR, "CENAF 4")
 
 # ---------------------------
 # Utilidades
@@ -125,8 +128,14 @@ def excel_path_por_comisaria(nombre_comisaria: str) -> str:
         base = excel_base_comisaria_14
     elif nombre_comisaria == "Comisaria 15":
         base = excel_base_comisaria_15
-    else:
+    elif nombre_comisaria == "Comisaria 6":
         base = excel_base_comisaria_6
+    elif nombre_comisaria == "Comisaria 42":
+        base = excel_base_comisaria_42
+    elif nombre_comisaria == "Comisaria 9":
+        base = excel_base_comisaria_9
+    else:  # "CENAF 4"
+        base = excel_base_cenaf_4
     return resolve_excel_path(base)
 
 # ---------------------------
@@ -168,7 +177,14 @@ if st.session_state.step == 1:
 
     comisaria = st.selectbox(
         "Seleccione la comisaría",
-        ["Comisaria 14", "Comisaria 15", "Comisaria 6"]
+        [
+            "Comisaria 14",
+            "Comisaria 15",
+            "Comisaria 6",
+            "Comisaria 42",
+            "Comisaria 9",
+            "CENAF 4",
+        ]
     )
 
     # --- Botón Descargar Excel + Uploader con validación de nombre ---
