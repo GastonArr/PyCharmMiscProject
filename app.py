@@ -187,13 +187,18 @@ if st.session_state.step == 1:
         ]
     )
 
+    excel_path_preview = excel_path_por_comisaria(comisaria)
+    asegurar_excel(excel_path_preview)
+    fila_objetivo = obtener_siguiente_fila_por_fecha(excel_path_preview, col_fecha="C")
+    planilla_llena = fila_objetivo >= 102
+
+    if planilla_llena:
+        st.error("PLANILLA COMPLETA POR FAVOR RENUEVE.")
+
     # --- Botón Descargar Excel + Uploader con validación de nombre ---
     col_dl, col_next = st.columns([1,1])
 
     with col_dl:
-        excel_path_preview = excel_path_por_comisaria(comisaria)
-        asegurar_excel(excel_path_preview)
-
         # Detectar MIME según extensión
         _ext = os.path.splitext(excel_path_preview)[1].lower()
         if _ext == ".xlsm":
@@ -238,19 +243,22 @@ if st.session_state.step == 1:
 
     with col_next:
         if st.button("Siguiente", use_container_width=True):
-            st.session_state.comisaria = comisaria
-            st.session_state.excel_path = excel_path_por_comisaria(comisaria)
-            st.session_state.fila = obtener_siguiente_fila_por_fecha(st.session_state.excel_path, col_fecha="C")
+            if planilla_llena:
+                st.error("PLANILLA COMPLETA POR FAVOR RENUEVE.")
+            else:
+                st.session_state.comisaria = comisaria
+                st.session_state.excel_path = excel_path_preview
+                st.session_state.fila = fila_objetivo
 
-            # reset subflujos
-            st.session_state.rh_done = False
-            st.session_state.rh_preview = None
-            st.session_state.others_done = False
-            st.session_state.others_preview = None
-            st.session_state.direcciones_preview = None
+                # reset subflujos
+                st.session_state.rh_done = False
+                st.session_state.rh_preview = None
+                st.session_state.others_done = False
+                st.session_state.others_preview = None
+                st.session_state.direcciones_preview = None
 
-            st.session_state.step = 2
-            st.rerun()
+                st.session_state.step = 2
+                st.rerun()
 
 elif st.session_state.step == 2:
     mostrar_hecho()
