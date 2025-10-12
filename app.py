@@ -400,9 +400,9 @@ elif st.session_state.step == 4:
         st.session_state.actuacion = "A CONSIDERACION"
         st.caption("Por haber seleccionado el delito 'A CONSIDERACION', la actuación queda fijada en 'A CONSIDERACION'.")
     else:
-        opciones_actuacion = ["ABREVIADA", "CONVENCIONAL"]
+        opciones_actuacion = ["CONVENCIONAL", "ABREVIADA"]
         if st.session_state.actuacion not in opciones_actuacion:
-            st.session_state.actuacion = "ABREVIADA"
+            st.session_state.actuacion = "CONVENCIONAL"
 
     actuacion = st.radio(
         "Seleccione una opción",
