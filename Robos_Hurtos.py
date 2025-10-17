@@ -144,6 +144,14 @@ SUBCAT_POR_ELEMENTO = {
     ],
 }
 
+DENOMINACION_MOTOCICLETA = [
+    "Hasta 100cc",
+    "100cc a 200cc",
+    "200cc a 500cc",
+    "500cc a 1000cc",
+    "Mas de 1000cc",
+]
+
 DENOMINACION_POR_SUBCAT = {
     "FIAT": ["COUPE","SEDAN 2/3 PUERTAS","SEDAN 4/5 PUERTAS","PICK UP 2/3 PUERTAS","PICK UP 4/5 PUERTAS",
              "DESCAPOTABLE O CONVERTIBLE","MONOVOLUMEN","UTILITARIO"],
@@ -464,6 +472,8 @@ def render(excel_path: str, fila: int, delito_x3: str) -> None:
             subcat = st.selectbox("SUBCATEGORIA", subcat_list, key="rh_subcat")
             if elem == "AUTOMOTOR" and subcat in DENOMINACION_POR_SUBCAT:
                 denom = st.selectbox("DENOMINACION", DENOMINACION_POR_SUBCAT[subcat], key="rh_denom")
+            elif elem == "MOTOCICLETA":
+                denom = st.selectbox("DENOMINACION", DENOMINACION_MOTOCICLETA, key="rh_denom")
             else:
                 st.caption("DENOMINACION: (no aplica)")
         else:
