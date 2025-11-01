@@ -2,7 +2,7 @@ import streamlit as st
 from openpyxl import load_workbook, Workbook
 import os
 import datetime
-import direcciones          # módulo externo para pantalla de direcciones    streamlit run app.py
+import direcciones          # módulo externo para pantalla de direcciones streamlit run app.py
 import Robos_Hurtos         # subflujo para delitos Robos/Hurtos
 import otros                # subflujo para Lesiones / Desaparición
 
@@ -334,6 +334,7 @@ elif st.session_state.step == 3:
         "ABUSO SEXUAL CON ACCESO CARNAL (VIOLACION)" + " ",
         "ABUSO SEXUAL SIMPLE",
         "DESAPARICION DE PERSONA",
+        "ATENTADO Y RESISTENCIA CONTRA LA AUTORIDAD" + " ",
     ]
     delitos = sorted(delitos, key=lambda s: s.casefold())
     delito = st.selectbox(
@@ -494,7 +495,7 @@ elif st.session_state.step == 6:
     delitos_rh_norm = {d.strip() for d in delitos_rh}
 
     delitos_otros = {
-        "LESIONES GRAVES", "LESIONES LEVES", "LESIONES GRAVISIMAS",
+        "LESIONES GRAVES", "LESIONES LEVES", "LESIONES GRAVISIMAS", "OTROS DELITOS CONTRA LA LIBERTAD INDIVIDUAL",
         "DESAPARICION DE PERSONA",
         "ABUSO DE ARMAS CON LESIONES",
         "ABUSO DE ARMAS SIN LESIONES",

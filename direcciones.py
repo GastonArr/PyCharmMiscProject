@@ -107,7 +107,7 @@ def render_direcciones_ui(excel_path: str, fila: int, comisaria: str) -> None:
         otro_barrio = st.text_input(
             "Especifique otro barrio (máx 15)",
             value=ss.get("dir_otro_barrio", ""),
-            max_chars=15,
+            max_chars=40,
             key="dir_otro_barrio",
         )
 

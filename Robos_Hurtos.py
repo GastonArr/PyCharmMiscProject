@@ -66,6 +66,7 @@ SEXO_OPCIONES = ["MASCULINO", "FEMENINO", "NO CONSTA"]
 CANT_1_10 = [str(i) for i in range(1, 11)]
 
 VULNERABILIDAD = [
+    "No pertenece a ningun grupo vulnerable",
     "Adultos Mayores",
     "Niñez - Edad joven",
     "Mujer embarazada",
@@ -73,31 +74,31 @@ VULNERABILIDAD = [
     "Personas en situacion de calle",
     "Migrantes",
     "Minorías Etnicas, Raciales o Religiosas",
-    "No pertenece a ningun grupo vulnerable",
     "Sin determinar",
 ]
 
 TIPO_ARMA = [
+    "Hechos SIN ARMAS*",
     "Hechos con ARMA DE FUEGO*",
     "Hechos con OTRA ARMA*",
-    "Hechos SIN ARMAS*",
     "SIN DETERMINAR *",
 ]
 
 INCULPADOS_SN = ["NO", "SI"]  # NO primero para que quede preseleccionado
 INCULPADOS_RANGO = ["Hasta 15 año", "15 a 17 años", "mayor de 18 años", "Sin Determinar"]
 
-ELEMENTOS_SUSTRAIDOS = ["AUTOMOTOR", "MOTOCICLETA", "BANCO", "ABIGEATO", "OTROS"]
+ELEMENTOS_SUSTRAIDOS = ["OTROS", "AUTOMOTOR", "MOTOCICLETA", "BANCO", "ABIGEATO"]
 
 TIPO_LUGAR_BASE = [
+    "SIN DETERMINAR",
     "HECHOS EN VÍA PÚBLICA (CALLE, PLAZA,ETC)",
     "HECHOS EN ESTABLECIMIENTOS COMERCIALES/PÚBLICOS",
     "HECHOS EN DOMICILIO PARTICULAR",
     "EN TRANSPORTE (SOLO ABIGEATO)",
-    "SIN DETERMINAR",
 ]
 
 DETALLE_EST_PUBLICOS = [
+    "OTROS (Detallar en Comentarios)",
     "ESCUELA",
     "SHOPPING",
     "UNIVERSIDAD",
@@ -113,7 +114,6 @@ DETALLE_EST_PUBLICOS = [
     "POLIDEPORTIVO",
     "YACIMIENTO",
     "BODEGA",
-    "OTROS (Detallar en Comentarios)",
 ]
 DETALLE_EST_VIA_PUBLICA = [
     "CALLE",
@@ -136,11 +136,11 @@ SUBCAT_POR_ELEMENTO = {
     "ABIGEATO": ["BOVINO","AVIAR","EQUINO","CAPRINO","PORCINO","OVINO","PISCICOLA","EXOTICO"],
     "BANCO": [],
     "OTROS": [
+        "OTROS (Detallar en comentarios)",
         "BILLETERA","CELULAR","BICICLETA","NOTEBOOK","ELECTRODOMESTICOS (Detallar en comentarios)",
         "RUEDA DE AUTO","BATERIA DE AUTO","DINERO_NACIONAL","DINERO_EXTRANJERO (Detallar en comentarios)",
         "MOCHILA - CARTERA","JOYAS","HERRAMIENTAS",
         "METAL (Cobre, Aluminio, Etc, Detallar en  Comentarios)",
-        "OTROS (Detallar en comentarios)",
     ],
 }
 

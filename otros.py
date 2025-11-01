@@ -1,6 +1,6 @@
 # otros.py
 # Subflujo “Otros” para:
-# - LESIONES GRAVES / LESIONES LEVES / LESIONES GRAVISIMAS
+# - LESIONES GRAVES / LESIONES LEVES / LESIONES GRAVISIMAS / OTROS DELITOS CONTRA LA LIBERTAD INDIVIDUAL
 # - ABUSO DE ARMAS CON LESIONES
 # - ABUSO DE ARMAS SIN LESIONES
 # - ABUSO SEXUAL CON ACCESO CARNAL (VIOLACION)
@@ -65,6 +65,7 @@ DELITOS_LESIONES = {
     "LESIONES GRAVES",
     "LESIONES LEVES",
     "LESIONES GRAVISIMAS",
+    "OTROS DELITOS CONTRA LA LIBERTAD INDIVIDUAL",
 }
 
 DELITOS_ABUSO_ARMAS = {
@@ -83,14 +84,14 @@ DELITO_DESAPARICION = "DESAPARICION DE PERSONA"
 # Catálogos
 # ==============================
 VULNERABILIDAD = [
-    "Adultos Mayores",
+    "No pertenece a ningun grupo vulnerable",
     "Niñez - Edad joven",
     "Mujer embarazada",
     "Persona con discapacidad",
     "Personas en situacion de calle",
     "Migrantes",
     "Minorías Etnicas, Raciales o Religiosas",
-    "No pertenece a ningun grupo vulnerable",
+    "Adultos Mayores",
     "Sin determinar",
 ]
 
