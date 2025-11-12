@@ -295,42 +295,8 @@ if st.session_state.step == 1:
                 st.rerun()
 
 elif st.session_state.step == 2:
-    mostrar_hecho()
     st.subheader(f"Usted seleccionó la {st.session_state.comisaria}")
     st.caption(f"Próximo registro: fila {st.session_state.fila}")
-
-    hecho = st.text_area(
-        "Indique el hecho (copie tal cual del MEMORANDUM):",
-        height=150,
-        value=st.session_state.hecho or ""
-    )
-    preventivo = st.text_input(
-        "Ingrese el número de preventivo (máx 20 caracteres)",
-        value=st.session_state.preventivo or "",
-        max_chars=20
-    )
-
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Volver"):
-            st.session_state.agenda_fecha = None
-            st.session_state.step = 1
-            st.rerun()
-    with col2:
-        if st.button("Siguiente"):
-            if not hecho or hecho.strip() == "":
-                st.warning("Por favor, ingrese el hecho antes de continuar.")
-                st.stop()
-            if not preventivo or preventivo.strip() == "":
-                st.warning("Por favor, ingrese el número de preventivo.")
-                st.stop()
-            st.session_state.hecho = hecho
-            st.session_state.preventivo = preventivo
-            st.session_state.step = 3
-            st.rerun()
-
-elif st.session_state.step == 3:
-    mostrar_hecho()
     st.subheader("Seleccione el día y el delito asignado")
 
     comisaria_actual = st.session_state.comisaria
@@ -389,7 +355,9 @@ elif st.session_state.step == 3:
     col1, col2 = st.columns(2)
     with col1:
         if st.button("Volver"):
-            st.session_state.step = 2
+            st.session_state.agenda_fecha = None
+            st.session_state.delito = None
+            st.session_state.step = 1
             st.rerun()
     with col2:
         if st.button("Siguiente"):
@@ -428,6 +396,40 @@ elif st.session_state.step == 3:
             st.session_state.delito = delito
             st.session_state.denunciante = denunciante
             st.session_state.motivo = motivo_sel
+            st.session_state.step = 3
+            st.rerun()
+
+elif st.session_state.step == 3:
+    mostrar_hecho()
+    st.subheader(f"Usted seleccionó la {st.session_state.comisaria}")
+    st.caption(f"Próximo registro: fila {st.session_state.fila}")
+
+    hecho = st.text_area(
+        "Indique el hecho (copie tal cual del MEMORANDUM):",
+        height=150,
+        value=st.session_state.hecho or ""
+    )
+    preventivo = st.text_input(
+        "Ingrese el número de preventivo (máx 20 caracteres)",
+        value=st.session_state.preventivo or "",
+        max_chars=20
+    )
+
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Volver"):
+            st.session_state.step = 2
+            st.rerun()
+    with col2:
+        if st.button("Siguiente"):
+            if not hecho or hecho.strip() == "":
+                st.warning("Por favor, ingrese el hecho antes de continuar.")
+                st.stop()
+            if not preventivo or preventivo.strip() == "":
+                st.warning("Por favor, ingrese el número de preventivo.")
+                st.stop()
+            st.session_state.hecho = hecho
+            st.session_state.preventivo = preventivo
             st.session_state.step = 4
             st.rerun()
 
