@@ -5,6 +5,7 @@ import datetime
 import direcciones          # módulo externo para pantalla de direcciones streamlit run app.py
 import Robos_Hurtos         # subflujo para delitos Robos/Hurtos
 import otros                # subflujo para Lesiones / Desaparición
+from login import render_login, render_user_header
 
 # ===========================
 # Config de rutas (en el repo)
@@ -144,6 +145,9 @@ def excel_path_por_comisaria(nombre_comisaria: str) -> str:
 
 def _init_state():
     d = st.session_state
+    d.setdefault("authenticated", False)
+    d.setdefault("username", None)
+    d.setdefault("allowed_comisarias", None)
     d.setdefault("step", 1)
     d.setdefault("comisaria", None)
     d.setdefault("delito", None)
@@ -167,6 +171,19 @@ def _init_state():
 
 _init_state()
 
+# Bloquear acceso si no está autenticado
+if not st.session_state.authenticated:
+    render_login()
+    st.stop()
+
+render_user_header()
+
+# Validar que la comisaría seleccionada (si existe) sea permitida
+allowed_comisarias = st.session_state.allowed_comisarias or []
+if st.session_state.comisaria and st.session_state.comisaria not in allowed_comisarias:
+    st.session_state.comisaria = None
+    st.session_state.step = 1
+
 # ---------------------------
 # UI por pasos
 # ---------------------------
@@ -175,16 +192,20 @@ if st.session_state.step == 1:
     st.title("CARGA DE SNIC")
     st.subheader("Seleccione la comisaría en la que desea trabajar:")
 
+    opciones_comisaria = allowed_comisarias
+    if not opciones_comisaria:
+        st.error("Su usuario no tiene comisarías asignadas. Contacte al administrador del sistema.")
+        st.stop()
+
+    if st.session_state.comisaria in opciones_comisaria:
+        index_default = opciones_comisaria.index(st.session_state.comisaria)
+    else:
+        index_default = 0
+
     comisaria = st.selectbox(
         "Seleccione la comisaría",
-        [
-            "Comisaria 14",
-            "Comisaria 15",
-            "Comisaria 6",
-            "Comisaria 42",
-            "Comisaria 9",
-            "CENAF 4",
-        ]
+        opciones_comisaria,
+        index=index_default if opciones_comisaria else 0,
     )
 
     excel_path_preview = excel_path_por_comisaria(comisaria)
@@ -243,6 +264,9 @@ if st.session_state.step == 1:
 
     with col_next:
         if st.button("Siguiente", use_container_width=True):
+            if comisaria not in allowed_comisarias:
+                st.error("No tiene permisos para trabajar con la comisaría seleccionada.")
+                st.stop()
             if planilla_llena:
                 st.error("PLANILLA COMPLETA POR FAVOR RENUEVE.")
             else:
