@@ -1,4 +1,5 @@
 import datetime
+import html
 import json
 import os
 from typing import Dict, List, Optional, Tuple
@@ -268,6 +269,196 @@ def resumen_dia_dataframe(comisaria: str, fecha: datetime.date) -> None:
 
 
 # ===========================
+# Componentes visuales
+# ===========================
+
+
+def _resumen_estados_dias(comisaria: str) -> Dict[datetime.date, Dict[str, int]]:
+    """Resumen por día para colorear el almanaque."""
+
+    data = _leer_agenda()
+    com_data = data.get(comisaria, {})
+    resumen: Dict[datetime.date, Dict[str, int]] = {}
+
+    for key in _ordenar_dias(list(com_data.keys())):
+        fecha = _parse_fecha(key)
+        if fecha is None:
+            continue
+
+        entry = com_data.get(key, {})
+        delitos = entry.get("delitos", {})
+        if not isinstance(delitos, dict) or not delitos:
+            continue
+
+        total_plan = 0
+        total_cargados = 0
+        pendientes = False
+
+        for valores in delitos.values():
+            if not isinstance(valores, dict):
+                continue
+
+            plan = max(int(valores.get("plan", 0)), 0)
+            cargados_raw = int(valores.get("cargados", 0))
+            cargados = max(min(cargados_raw, plan if plan > 0 else cargados_raw), 0)
+
+            total_plan += plan
+            total_cargados += cargados
+            if plan > cargados:
+                pendientes = True
+
+        estado = "pendiente" if pendientes else "completo"
+
+        resumen[fecha] = {
+            "plan": total_plan,
+            "cargados": total_cargados,
+            "restantes": max(total_plan - total_cargados, 0),
+            "estado": estado,
+        }
+
+    return resumen
+
+
+def _render_almanaque(dias: List[datetime.date], resumen: Dict[datetime.date, Dict[str, int]], seleccionada: Optional[datetime.date]) -> None:
+    if not dias:
+        return
+
+    st.markdown(
+        """
+        <style>
+        .agenda-cal-wrapper {
+            position: sticky;
+            top: 4rem;
+            z-index: 100;
+            background-color: var(--background-color, #ffffff);
+            padding: 0.75rem 1rem;
+            border: 1px solid rgba(49, 51, 63, 0.2);
+            border-radius: 0.75rem;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
+            margin-bottom: 1rem;
+        }
+        .agenda-cal-title {
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        .agenda-calendar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+        .agenda-day {
+            min-width: 6.5rem;
+            padding: 0.55rem 0.65rem;
+            border-radius: 0.6rem;
+            border: 1px solid rgba(49, 51, 63, 0.25);
+            background-color: rgba(248, 249, 250, 0.8);
+            text-align: center;
+            font-size: 0.9rem;
+            line-height: 1.1rem;
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .agenda-day.seleccionado {
+            box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.35);
+            transform: translateY(-1px);
+        }
+        .agenda-day.estado-pendiente {
+            background-color: #fde2e1;
+            border-color: #f5c2c7;
+            color: #7f1d1d;
+        }
+        .agenda-day.estado-completo {
+            background-color: #d1f2d7;
+            border-color: #badbcc;
+            color: #0f5132;
+        }
+        .agenda-day-date {
+            font-weight: 600;
+            font-size: 1rem;
+        }
+        .agenda-day-meta {
+            font-size: 0.75rem;
+            opacity: 0.85;
+        }
+        .agenda-legend {
+            display: flex;
+            gap: 0.85rem;
+            margin-top: 0.6rem;
+            flex-wrap: wrap;
+            font-size: 0.8rem;
+        }
+        .agenda-legend-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+        .agenda-legend-dot {
+            width: 0.75rem;
+            height: 0.75rem;
+            border-radius: 999px;
+            display: inline-block;
+        }
+        .agenda-legend-dot.pendiente {
+            background-color: #dc3545;
+        }
+        .agenda-legend-dot.completo {
+            background-color: #198754;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    tarjetas: List[str] = []
+    for fecha in dias:
+        info = resumen.get(fecha, {})
+        plan = int(info.get("plan", 0) or 0)
+        cargados = int(info.get("cargados", 0) or 0)
+        restantes = int(info.get("restantes", max(plan - cargados, 0)) or 0)
+        estado = info.get("estado")
+        if not estado:
+            estado = "completo" if plan > 0 and restantes <= 0 else "pendiente"
+
+        clases = ["agenda-day", f"estado-{estado}"]
+        if seleccionada and fecha == seleccionada:
+            clases.append("seleccionado")
+
+        fecha_txt = fecha.strftime("%d/%m")
+        tooltip = f"{fecha.strftime('%d/%m/%Y')} - {cargados} cargados de {plan}"
+
+        if plan <= 0:
+            meta = "Sin delitos asignados"
+        elif restantes > 0:
+            meta = f"{cargados}/{plan} cargados · {restantes} restantes"
+        else:
+            meta = f"{cargados}/{plan} cargados"
+
+        tarjetas.append(
+            "<div class='{}' title='{}'><div class='agenda-day-date'>{}</div>"
+            "<div class='agenda-day-meta'>{}</div></div>".format(
+                " ".join(clases),
+                html.escape(tooltip),
+                html.escape(fecha_txt),
+                html.escape(meta),
+            )
+        )
+
+    calendario_html = "".join(tarjetas)
+    st.markdown(
+        f"""
+        <div class="agenda-cal-wrapper">
+            <div class="agenda-cal-title">Días asignados</div>
+            <div class="agenda-calendar">{calendario_html}</div>
+            <div class="agenda-legend">
+                <span class="agenda-legend-item"><span class="agenda-legend-dot pendiente"></span>Pendiente</span>
+                <span class="agenda-legend-item"><span class="agenda-legend-dot completo"></span>Completado</span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ===========================
 # UI para Streamlit
 # ===========================
 
@@ -366,6 +557,8 @@ def render_selector_comisaria(comisaria: str) -> Tuple[Optional[datetime.date], 
     if not dias:
         return None, {}, "No hay delitos asignados por el administrador para esta comisaría."
 
+    resumen = _resumen_estados_dias(comisaria)
+
     preferido = st.session_state.get("agenda_fecha")
     if preferido not in dias:
         preferido = obtener_primer_dia_pendiente(comisaria) or dias[0]
@@ -380,6 +573,8 @@ def render_selector_comisaria(comisaria: str) -> Tuple[Optional[datetime.date], 
         return None, {}, "Seleccione una fecha válida."
 
     st.session_state.agenda_fecha = fecha_sel
+
+    _render_almanaque(dias, resumen, fecha_sel)
 
     if fecha_sel not in dias:
         return None, {}, "No hay delitos asignados para la fecha elegida."
