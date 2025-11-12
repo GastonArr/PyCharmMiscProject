@@ -1,0 +1,394 @@
+import datetime
+import json
+import os
+from typing import Dict, List, Optional, Tuple
+
+import streamlit as st
+
+from login import COMISARIA_OPTIONS
+
+# ===========================
+# Configuración básica
+# ===========================
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "datos")
+os.makedirs(DATA_DIR, exist_ok=True)
+AGENDA_PATH = os.path.join(DATA_DIR, "agenda_delitos.json")
+
+# Usuarios administradores explícitos. Se complementa con el chequeo de comisarías completas.
+ADMIN_USERS = {"Gaston"}
+
+# Lista única de delitos disponibles. Se replica el listado de app.py para centralizarlo aquí.
+DELITOS_DISPONIBLES: List[str] = sorted([
+    "ROBO SIMPLE ",
+    "HURTO SIMPLE ",
+    "A CONSIDERACION",
+    "ABUSO DE ARMAS CON LESIONES",
+    "ABUSO DE ARMAS SIN LESIONES ",
+    "AMENAZAS CALIFICADA POR EL USO DE ARMAS",
+    "AMENAZAS OTRAS",
+    "AMENAZAS SIMPLE (ALARMAR O AMEDRENTAR)",
+    "DAÑOS (NO INCLUYE INFORMATICOS)",
+    "DESOBEDIENCIA DE UNA ORDEN JUDICIAL",
+    "ENCUBRIMIENTO ",
+    "ESTAFAS Y DEFRAUDACIONES VIRTUALES",
+    "ESTAFAS, DEFRAUDACIONES,USURA y USURPACION (NO INCLUYE VIRTUALES)",
+    "FALSIFICACION DE MONEDA, BILLETES DE BANCO, TITULO AL PORTADOR Y DOCUMENTOS DE CREDITO",
+    "HOMICIDIO EN GRADO DE TENTATIVA",
+    "HOMICIDIO SIMPLE",
+    "HURTO EN GRADO DE TENTATIVA ",
+    "LESIONES GRAVES",
+    "LESIONES LEVES",
+    "LESIONES GRAVISIMAS",
+    "OTROS DELITOS CONTRA LA LIBERTAD INDIVIDUAL ",
+    "OTROS INCENDIOS O ESTRAGOS",
+    "ROBO ABIGEATO ",
+    "ROBO AGRAVADO POR EL USO DE ARMA DE ARMA BLANCA",
+    "ROBO AGRAVADO POR EL USO DE ARMA DE FUEGO",
+    "ROBO EN GRADO TENTATIVA ",
+    "SUICIDIO_(CONSUMADO)",
+    "TENENCIA ILEGAL DE ARMAS DE FUEGO",
+    "VIOLACION DE DOMICILIO SIMPLE ",
+    "ABUSO SEXUAL CON ACCESO CARNAL (VIOLACION) ",
+    "ABUSO SEXUAL SIMPLE",
+    "DESAPARICION DE PERSONA",
+    "ATENTADO Y RESISTENCIA CONTRA LA AUTORIDAD ",
+], key=lambda s: s.casefold())
+
+
+# ===========================
+# Utilidades internas
+# ===========================
+
+AgendaData = Dict[str, Dict[str, Dict[str, Dict[str, int]]]]
+
+
+def es_admin(username: Optional[str], allowed_comisarias: Optional[List[str]]) -> bool:
+    if not username:
+        return False
+    if username in ADMIN_USERS:
+        return True
+    allowed = allowed_comisarias or []
+    return set(allowed) == set(COMISARIA_OPTIONS)
+
+
+def _leer_agenda() -> AgendaData:
+    if not os.path.exists(AGENDA_PATH):
+        return {}
+    try:
+        with open(AGENDA_PATH, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+            if isinstance(data, dict):
+                return data  # type: ignore[return-value]
+    except json.JSONDecodeError:
+        st.error("El archivo de agenda está dañado. Se comenzará con una agenda vacía.")
+    return {}
+
+
+def _guardar_agenda(data: AgendaData) -> None:
+    with open(AGENDA_PATH, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
+
+
+def _key_fecha(fecha: datetime.date) -> str:
+    if isinstance(fecha, datetime.datetime):
+        fecha = fecha.date()
+    return fecha.isoformat()
+
+
+def _parse_fecha(fecha_str: str) -> Optional[datetime.date]:
+    try:
+        return datetime.date.fromisoformat(fecha_str)
+    except ValueError:
+        return None
+
+
+def _ordenar_dias(dias: List[str]) -> List[str]:
+    fechas = [(_parse_fecha(d), d) for d in dias]
+    fechas_validas = [par for par in fechas if par[0] is not None]
+    fechas_validas.sort(key=lambda par: par[0])
+    return [par[1] for par in fechas_validas]
+
+
+def _ensure_entry(data: AgendaData, comisaria: str, fecha: datetime.date) -> Dict[str, Dict[str, int]]:
+    com_data = data.setdefault(comisaria, {})
+    key = _key_fecha(fecha)
+    entry = com_data.setdefault(key, {"delitos": {}})
+    if "delitos" not in entry:
+        entry["delitos"] = {}
+    return entry
+
+
+# ===========================
+# API pública de datos
+# ===========================
+
+
+def obtener_dias_planificados(comisaria: str) -> List[datetime.date]:
+    data = _leer_agenda()
+    dias = data.get(comisaria, {})
+    ordenados = _ordenar_dias(list(dias.keys()))
+    resultado = []
+    for key in ordenados:
+        fecha = _parse_fecha(key)
+        if fecha is not None:
+            resultado.append(fecha)
+    return resultado
+
+
+def obtener_detalle_dia(comisaria: str, fecha: datetime.date) -> Dict[str, Dict[str, int]]:
+    data = _leer_agenda()
+    entry = data.get(comisaria, {}).get(_key_fecha(fecha), {})
+    delitos = entry.get("delitos", {})
+    resultado: Dict[str, Dict[str, int]] = {}
+    for delito, valores in delitos.items():
+        plan = int(valores.get("plan", 0))
+        cargados = int(valores.get("cargados", 0))
+        resultado[delito] = {
+            "plan": max(plan, 0),
+            "cargados": max(min(cargados, plan if plan > 0 else cargados), 0),
+        }
+    return resultado
+
+
+def obtener_delitos_pendientes(comisaria: str, fecha: datetime.date) -> Dict[str, Dict[str, int]]:
+    detalle = obtener_detalle_dia(comisaria, fecha)
+    pendientes: Dict[str, Dict[str, int]] = {}
+    for delito, valores in detalle.items():
+        plan = valores.get("plan", 0)
+        cargados = valores.get("cargados", 0)
+        restantes = max(plan - cargados, 0)
+        pendientes[delito] = {
+            "plan": plan,
+            "cargados": cargados,
+            "restantes": restantes,
+        }
+    return pendientes
+
+
+def obtener_primer_dia_pendiente(comisaria: str) -> Optional[datetime.date]:
+    for fecha in obtener_dias_planificados(comisaria):
+        detalle = obtener_delitos_pendientes(comisaria, fecha)
+        if any(info.get("restantes", 0) > 0 for info in detalle.values()):
+            return fecha
+    return None
+
+
+def puede_cargar_delito(comisaria: str, fecha: datetime.date, delito: str) -> Tuple[bool, Optional[str]]:
+    detalle = obtener_delitos_pendientes(comisaria, fecha)
+    if delito not in detalle:
+        return False, "El delito seleccionado no está asignado para este día."
+    info = detalle[delito]
+    if info.get("restantes", 0) <= 0:
+        return False, "Ya se cargaron todos los hechos planificados para este delito."
+    primer_pendiente = obtener_primer_dia_pendiente(comisaria)
+    if primer_pendiente and fecha > primer_pendiente:
+        msg = primer_pendiente.strftime("%d/%m/%Y")
+        return False, f"Debe completar primero el día {msg} antes de avanzar a fechas posteriores."
+    return True, None
+
+
+def registrar_carga_delito(comisaria: str, fecha: datetime.date, delito: str) -> Tuple[bool, Optional[str], Optional[int]]:
+    data = _leer_agenda()
+    com_data = data.get(comisaria)
+    if not com_data:
+        return False, "No hay un almanaque cargado para esta comisaría.", None
+    key = _key_fecha(fecha)
+    dia_info = com_data.get(key)
+    if not dia_info:
+        return False, "El día seleccionado no tiene delitos asignados.", None
+    delitos = dia_info.get("delitos", {})
+    if delito not in delitos:
+        return False, "El delito no pertenece al día seleccionado.", None
+    registro = delitos[delito]
+    plan = int(registro.get("plan", 0))
+    cargados = int(registro.get("cargados", 0))
+    if cargados >= plan:
+        return False, "Se alcanzó el total planificado para este delito.", None
+    registro["cargados"] = cargados + 1
+    _guardar_agenda(data)
+    restantes = max(plan - (cargados + 1), 0)
+    return True, None, restantes
+
+
+def asignar_delito(comisaria: str, fecha: datetime.date, delito: str, cantidad: int) -> Tuple[bool, Optional[str]]:
+    if cantidad <= 0:
+        return False, "La cantidad debe ser mayor a cero."
+    data = _leer_agenda()
+    entry = _ensure_entry(data, comisaria, fecha)
+    delitos = entry["delitos"]
+    registro = delitos.get(delito)
+    if registro and registro.get("cargados", 0) > cantidad:
+        return False, "No se puede reducir la cantidad por debajo de lo ya cargado."
+    delitos[delito] = {
+        "plan": int(cantidad),
+        "cargados": int(registro.get("cargados", 0)) if registro else 0,
+    }
+    _guardar_agenda(data)
+    return True, None
+
+
+def quitar_delito(comisaria: str, fecha: datetime.date, delito: str) -> Tuple[bool, Optional[str]]:
+    data = _leer_agenda()
+    com_data = data.get(comisaria)
+    if not com_data:
+        return False, "No se encontraron asignaciones para la comisaría.", None
+    key = _key_fecha(fecha)
+    dia_info = com_data.get(key)
+    if not dia_info:
+        return False, "El día seleccionado no tiene delitos asignados.", None
+    delitos = dia_info.get("delitos", {})
+    registro = delitos.get(delito)
+    if not registro:
+        return False, "El delito no está asignado en este día.", None
+    if int(registro.get("cargados", 0)) > 0:
+        return False, "No se puede quitar un delito que ya tiene cargas registradas.", None
+    delitos.pop(delito, None)
+    if not delitos:
+        com_data.pop(key, None)
+    _guardar_agenda(data)
+    return True, None
+
+
+def resumen_dia_dataframe(comisaria: str, fecha: datetime.date) -> None:
+    detalle = obtener_delitos_pendientes(comisaria, fecha)
+    if not detalle:
+        st.info("No hay delitos planificados para el día seleccionado.")
+        return
+    filas = []
+    for delito, info in sorted(detalle.items(), key=lambda par: par[0].casefold()):
+        filas.append({
+            "Delito": delito.strip(),
+            "Planificados": info.get("plan", 0),
+            "Cargados": info.get("cargados", 0),
+            "Restantes": info.get("restantes", 0),
+        })
+    st.dataframe(filas, use_container_width=True)
+
+
+# ===========================
+# UI para Streamlit
+# ===========================
+
+
+def render_admin_agenda(username: Optional[str], allowed_comisarias: Optional[List[str]]) -> None:
+    if not es_admin(username, allowed_comisarias):
+        return
+
+    st.markdown("---")
+    st.markdown("### 🗓️ Almanaque de asignación de delitos (Administración)")
+    st.caption(
+        "Programe qué delitos debe cargar cada comisaría en un día determinado."
+        " Puede actualizar cantidades o quitar delitos siempre que no tengan cargas registradas."
+    )
+
+    comisarias = allowed_comisarias or COMISARIA_OPTIONS
+    comisaria_sel = st.selectbox(
+        "Seleccione la comisaría a planificar",
+        options=comisarias,
+        key="agenda_admin_comisaria",
+    )
+    fecha_sel = st.date_input(
+        "Día a planificar",
+        value=st.session_state.get("agenda_admin_fecha") or datetime.date.today(),
+        key="agenda_admin_fecha",
+    )
+
+    if not isinstance(fecha_sel, datetime.date):
+        st.error("Seleccione un día válido.")
+        return
+
+    st.markdown(
+        f"#### Delitos planificados para {fecha_sel.strftime('%d/%m/%Y')} — {comisaria_sel}"
+    )
+    detalle = obtener_detalle_dia(comisaria_sel, fecha_sel)
+    if not detalle:
+        st.info("No hay delitos asignados en este día.")
+    else:
+        for idx, (delito, info) in enumerate(sorted(detalle.items(), key=lambda par: par[0].casefold())):
+            restantes = max(info.get("plan", 0) - info.get("cargados", 0), 0)
+            cols = st.columns([3, 1, 1, 1])
+            cols[0].markdown(f"**{delito.strip()}**")
+            cols[1].markdown(
+                f"Planificados: {info.get('plan', 0)}  \\n"
+                f"Cargados: {info.get('cargados', 0)}  \\n"
+                f"Restantes: {restantes}"
+            )
+            nueva_cantidad = cols[2].number_input(
+                "Cantidad",
+                min_value=max(info.get("cargados", 0), 0),
+                value=info.get("plan", 0),
+                step=1,
+                key=f"agenda_admin_plan_{idx}"
+            )
+            if cols[2].button("Actualizar", key=f"agenda_admin_update_{idx}"):
+                ok, msg = asignar_delito(comisaria_sel, fecha_sel, delito, int(nueva_cantidad))
+                if ok:
+                    st.success(f"Se actualizó la cantidad para {delito.strip()}.")
+                    st.rerun()
+                else:
+                    st.error(msg or "No se pudo actualizar la cantidad.")
+            if cols[3].button("Quitar", key=f"agenda_admin_remove_{idx}"):
+                ok, msg = quitar_delito(comisaria_sel, fecha_sel, delito)
+                if ok:
+                    st.warning(f"Se quitó {delito.strip()} del día seleccionado.")
+                    st.rerun()
+                else:
+                    st.error(msg or "No se pudo quitar el delito.")
+
+    st.markdown("#### Agregar o actualizar delito")
+    with st.form(key="agenda_admin_add_form"):
+        delito_nuevo = st.selectbox(
+            "Delito",
+            options=DELITOS_DISPONIBLES,
+            key="agenda_admin_delito_add",
+        )
+        cantidad = st.number_input(
+            "Cantidad a cargar",
+            min_value=1,
+            step=1,
+            value=1,
+            key="agenda_admin_cantidad_add",
+        )
+        submitted = st.form_submit_button("Guardar asignación")
+        if submitted:
+            ok, msg = asignar_delito(comisaria_sel, fecha_sel, delito_nuevo, int(cantidad))
+            if ok:
+                st.success("Asignación guardada correctamente.")
+                st.rerun()
+            else:
+                st.error(msg or "No se pudo guardar la asignación.")
+
+
+def render_selector_comisaria(comisaria: str) -> Tuple[Optional[datetime.date], Dict[str, Dict[str, int]], Optional[str]]:
+    dias = obtener_dias_planificados(comisaria)
+    if not dias:
+        return None, {}, "No hay delitos asignados por el administrador para esta comisaría."
+
+    preferido = st.session_state.get("agenda_fecha")
+    if preferido not in dias:
+        preferido = obtener_primer_dia_pendiente(comisaria) or dias[0]
+
+    fecha_sel = st.date_input(
+        "Seleccione el día asignado",
+        value=preferido,
+        key="agenda_fecha_comisaria",
+    )
+
+    if not isinstance(fecha_sel, datetime.date):
+        return None, {}, "Seleccione una fecha válida."
+
+    st.session_state.agenda_fecha = fecha_sel
+
+    if fecha_sel not in dias:
+        return None, {}, "No hay delitos asignados para la fecha elegida."
+
+    primer_pendiente = obtener_primer_dia_pendiente(comisaria)
+    if primer_pendiente and fecha_sel > primer_pendiente:
+        msg = primer_pendiente.strftime("%d/%m/%Y")
+        return None, {}, f"Debe completar primero el día {msg} antes de avanzar."
+
+    resumen_dia_dataframe(comisaria, fecha_sel)
+    pendientes = obtener_delitos_pendientes(comisaria, fecha_sel)
+    return fecha_sel, pendientes, None
