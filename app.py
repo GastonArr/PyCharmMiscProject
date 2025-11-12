@@ -5,6 +5,7 @@ import datetime
 import direcciones          # módulo externo para pantalla de direcciones streamlit run app.py
 import Robos_Hurtos         # subflujo para delitos Robos/Hurtos
 import otros                # subflujo para Lesiones / Desaparición
+import agenda_delitos       # gestión de almanaque de delitos asignados
 from login import render_login, render_user_header
 
 # ===========================
@@ -151,6 +152,7 @@ def _init_state():
     d.setdefault("step", 1)
     d.setdefault("comisaria", None)
     d.setdefault("delito", None)
+    d.setdefault("agenda_fecha", None)
     d.setdefault("hecho", None)
     d.setdefault("actuacion", None)
     d.setdefault("excel_path", None)
@@ -180,6 +182,10 @@ render_user_header()
 
 # Validar que la comisaría seleccionada (si existe) sea permitida
 allowed_comisarias = st.session_state.allowed_comisarias or []
+
+# Panel de administración del almanaque (solo usuarios habilitados)
+agenda_delitos.render_admin_agenda(st.session_state.username, allowed_comisarias)
+
 if st.session_state.comisaria and st.session_state.comisaria not in allowed_comisarias:
     st.session_state.comisaria = None
     st.session_state.step = 1
@@ -273,6 +279,7 @@ if st.session_state.step == 1:
                 st.session_state.comisaria = comisaria
                 st.session_state.excel_path = excel_path_preview
                 st.session_state.fila = fila_objetivo
+                st.session_state.agenda_fecha = None
 
                 # reset subflujos
                 for k in ("rh_cache", "rh_vict_rows", "rh_sex_rows", "rh_step"):
@@ -306,6 +313,7 @@ elif st.session_state.step == 2:
     col1, col2 = st.columns(2)
     with col1:
         if st.button("Volver"):
+            st.session_state.agenda_fecha = None
             st.session_state.step = 1
             st.rerun()
     with col2:
@@ -323,49 +331,43 @@ elif st.session_state.step == 2:
 
 elif st.session_state.step == 3:
     mostrar_hecho()
-    st.subheader("Indique el delito que desea cargar")
+    st.subheader("Seleccione el día y el delito asignado")
 
-    delitos = [
-        "ROBO SIMPLE ",
-        "HURTO SIMPLE ",
-        "A CONSIDERACION",
-        "ABUSO DE ARMAS CON LESIONES",
-        "ABUSO DE ARMAS SIN LESIONES" + " ",
-        "AMENAZAS CALIFICADA POR EL USO DE ARMAS",
-        "AMENAZAS OTRAS",
-        "AMENAZAS SIMPLE (ALARMAR O AMEDRENTAR)",
-        "DAÑOS (NO INCLUYE INFORMATICOS)",
-        "DESOBEDIENCIA DE UNA ORDEN JUDICIAL",
-        "ENCUBRIMIENTO" + " ",
-        "ESTAFAS Y DEFRAUDACIONES VIRTUALES",
-        "ESTAFAS, DEFRAUDACIONES,USURA y USURPACION (NO INCLUYE VIRTUALES)",
-        "FALSIFICACION DE MONEDA, BILLETES DE BANCO, TITULO AL PORTADOR Y DOCUMENTOS DE CREDITO",
-        "HOMICIDIO EN GRADO DE TENTATIVA",
-        "HOMICIDIO SIMPLE",
-        "HURTO EN GRADO DE TENTATIVA" + " ",
-        "LESIONES GRAVES",
-        "LESIONES LEVES",
-        "LESIONES GRAVISIMAS",
-        "OTROS DELITOS CONTRA LA LIBERTAD INDIVIDUAL" + " ",
-        "OTROS INCENDIOS O ESTRAGOS",
-        "ROBO ABIGEATO" + " ",
-        "ROBO AGRAVADO POR EL USO DE ARMA DE ARMA BLANCA",
-        "ROBO AGRAVADO POR EL USO DE ARMA DE FUEGO",
-        "ROBO EN GRADO TENTATIVA" + " ",
-        "SUICIDIO_(CONSUMADO)",
-        "TENENCIA ILEGAL DE ARMAS DE FUEGO",
-        "VIOLACION DE DOMICILIO SIMPLE" + " ",
-        "ABUSO SEXUAL CON ACCESO CARNAL (VIOLACION)" + " ",
-        "ABUSO SEXUAL SIMPLE",
-        "DESAPARICION DE PERSONA",
-        "ATENTADO Y RESISTENCIA CONTRA LA AUTORIDAD" + " ",
-    ]
-    delitos = sorted(delitos, key=lambda s: s.casefold())
+    comisaria_actual = st.session_state.comisaria
+    fecha_agenda, delitos_pendientes, mensaje_agenda = agenda_delitos.render_selector_comisaria(comisaria_actual)
+
+    if mensaje_agenda:
+        st.warning(mensaje_agenda)
+        st.stop()
+
+    if fecha_agenda is None:
+        st.warning("Seleccione un día válido para continuar.")
+        st.stop()
+
+    if not delitos_pendientes:
+        st.info("No hay delitos pendientes para el día seleccionado. Consulte al administrador para nuevas asignaciones.")
+        st.stop()
+
+    opciones_delito = list(delitos_pendientes.keys())
+
+    def _format_delito(nombre: str) -> str:
+        info_delito = delitos_pendientes.get(nombre, {})
+        restantes = info_delito.get("restantes", 0)
+        planificados = info_delito.get("plan", 0)
+        return f"{nombre.strip()} — restantes {restantes} de {planificados}"
+
+    if st.session_state.delito in opciones_delito:
+        index_default = opciones_delito.index(st.session_state.delito)
+    else:
+        index_default = 0
+
     delito = st.selectbox(
         "Seleccione el delito",
-        delitos,
-        index=(delitos.index(st.session_state.delito) if st.session_state.delito in delitos else 0),
+        opciones_delito,
+        index=index_default,
+        format_func=_format_delito,
     )
+    st.caption("Solo se muestran los delitos asignados por el administrador para el día elegido.")
 
     denunciante = st.text_input(
         "Indique el nombre y apellido del denunciante o víctima",
@@ -393,6 +395,20 @@ elif st.session_state.step == 3:
         if st.button("Siguiente"):
             if not denunciante or denunciante.strip() == "":
                 st.warning("Por favor, ingrese el nombre y apellido del denunciante o víctima.")
+                st.stop()
+
+            fecha_validacion = st.session_state.get("agenda_fecha")
+            if not isinstance(fecha_validacion, datetime.date):
+                st.warning("Seleccione un día válido antes de continuar.")
+                st.stop()
+
+            ok_delito, msg_delito = agenda_delitos.puede_cargar_delito(
+                st.session_state.comisaria,
+                fecha_validacion,
+                delito,
+            )
+            if not ok_delito:
+                st.warning(msg_delito or "El delito seleccionado no está disponible para su carga.")
                 st.stop()
 
             # NUEVO: si cambió el delito, limpiar previews/flags/caches de subflujos
@@ -879,11 +895,24 @@ elif st.session_state.step == 6:
             )
 
             if ok:
+                agenda_fecha = st.session_state.get("agenda_fecha")
+                if isinstance(agenda_fecha, datetime.date):
+                    registrado, msg_agenda, restantes = agenda_delitos.registrar_carga_delito(
+                        st.session_state.comisaria,
+                        agenda_fecha,
+                        st.session_state.delito,
+                    )
+                    if not registrado:
+                        st.warning(msg_agenda or "No se pudo actualizar el almanaque del día seleccionado.")
+                    elif restantes == 0:
+                        st.caption("✔️ Se completó la carga planificada para este delito en el día seleccionado.")
+
                 st.success(f"Datos guardados en {st.session_state.comisaria} (fila {fila}) ✅")
                 # Reset total
                 st.session_state.step = 1
                 st.session_state.hecho = None
                 st.session_state.delito = None
+                st.session_state.agenda_fecha = None
                 st.session_state.actuacion = None
                 st.session_state.fila = None
                 st.session_state.fecha_denuncia = None
