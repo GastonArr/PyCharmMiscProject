@@ -7,7 +7,6 @@ import Robos_Hurtos         # subflujo para delitos Robos/Hurtos
 import otros                # subflujo para Lesiones / Desaparición
 import agenda_delitos       # gestión de almanaque de delitos asignados
 from login import render_login, render_user_header
-import cloud_storage
 
 # ===========================
 # Config de rutas (en el repo)
@@ -38,7 +37,6 @@ def resolve_excel_path(base_without_ext: str) -> str:
     """
     for ext in (".xlsm", ".xlsx", ".xls"):
         cand = base_without_ext + ext
-        cloud_storage.ensure_local_file(cand)
         if os.path.exists(cand):
             return cand
     return base_without_ext + ".xlsm"
@@ -48,7 +46,6 @@ def asegurar_excel(path: str):
     Crea el archivo si no existe (xlsx o xlsm según la extensión).
     No crea macros; si el archivo ya tiene macros, se conservarán con keep_vba=True al cargar/guardar.
     """
-    cloud_storage.ensure_local_file(path)
     carpeta = os.path.dirname(path)
     if carpeta and not os.path.exists(carpeta):
         os.makedirs(carpeta, exist_ok=True)
@@ -57,7 +54,6 @@ def asegurar_excel(path: str):
         ws = wb.active
         ws.title = "Hoja1"
         wb.save(path)
-        cloud_storage.sync_local_to_remote(path)
 
 def cargar_libro(path: str):
     """
@@ -112,7 +108,6 @@ def escribir_registro(path: str, fila: int, hecho, delito,
         ws[f"X{fila}"].value  = unwrap_quotes(delito)
         ws[f"R{fila}"].value  = unwrap_quotes(actuacion)
         wb.save(path)
-        cloud_storage.sync_local_to_remote(path)
         return True
     except PermissionError:
         st.error("⚠️ No se pudo guardar porque el archivo está abierto en Excel con bloqueo de escritura. Cerrá el archivo y probá de nuevo.")
@@ -734,7 +729,6 @@ elif st.session_state.step == 6:
                         ws_dir[C("N")].value = unwrap_quotes(link)
 
                     wb_dir.save(st.session_state.excel_path)
-                    cloud_storage.sync_local_to_remote(st.session_state.excel_path)
 
                 except PermissionError:
                     st.error("⚠️ No se pudo guardar Direcciones: el archivo está abierto en Excel.")
@@ -830,7 +824,6 @@ elif st.session_state.step == 6:
                     if es not in (None, ""): ws_rh[C("BK")].value = unwrap_quotes(str(es).strip())
 
                     wb_rh.save(st.session_state.excel_path)
-                    cloud_storage.sync_local_to_remote(st.session_state.excel_path)
 
                 except PermissionError:
                     st.error("⚠️ No se pudo guardar Robos/Hurtos: el archivo está abierto en Excel.")
@@ -880,7 +873,6 @@ elif st.session_state.step == 6:
                         ws_o[C("BA")].value = unwrap_quotes(str(oprev.get("aparecio")).strip())
 
                     wb_o.save(st.session_state.excel_path)
-                    cloud_storage.sync_local_to_remote(st.session_state.excel_path)
 
                 except PermissionError:
                     st.error("⚠️ No se pudo guardar Otros: el archivo está abierto en Excel.")
