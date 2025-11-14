@@ -1,5 +1,2 @@
 streamlit>=1.36
 openpyxl>=3.1
-google-api-python-client>=2.126
-google-auth>=2.29
-google-auth-httplib2>=0.2.0

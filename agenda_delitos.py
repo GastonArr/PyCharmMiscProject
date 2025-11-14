@@ -1,39 +1,21 @@
 import datetime
 import html
 import json
+import os
 from typing import Dict, List, Optional, Tuple
 
 import streamlit as st
 
-from drive_storage import DriveStorage, get_storage, guess_mime_type
 from login import COMISARIA_OPTIONS
 
 # ===========================
 # Configuración básica
 # ===========================
 
-AGENDA_REMOTE_FILENAME = "agenda_delitos.json"
-AGENDA_MIME = guess_mime_type(AGENDA_REMOTE_FILENAME)
-
-
-def _storage() -> Optional[DriveStorage]:
-    try:
-        return get_storage()
-    except RuntimeError as exc:
-        st.error(f"⚠️ {exc}")
-        return None
-
-
-def _agenda_local_path(force_download: bool = False) -> Optional[str]:
-    storage = _storage()
-    if storage is None:
-        return None
-    return storage.ensure_local_file(
-        AGENDA_REMOTE_FILENAME,
-        default=lambda: b"{}",
-        mime_type=AGENDA_MIME,
-        force_download=force_download,
-    )
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "datos")
+os.makedirs(DATA_DIR, exist_ok=True)
+AGENDA_PATH = os.path.join(DATA_DIR, "agenda_delitos.json")
 
 # Usuarios administradores explícitos. Se complementa con el chequeo de comisarías completas.
 ADMIN_USERS = {"Gaston"}
@@ -93,11 +75,10 @@ def es_admin(username: Optional[str], allowed_comisarias: Optional[List[str]]) -
 
 
 def _leer_agenda() -> AgendaData:
-    path = _agenda_local_path(force_download=True)
-    if not path:
+    if not os.path.exists(AGENDA_PATH):
         return {}
     try:
-        with open(path, "r", encoding="utf-8") as fh:
+        with open(AGENDA_PATH, "r", encoding="utf-8") as fh:
             data = json.load(fh)
             if isinstance(data, dict):
                 return data  # type: ignore[return-value]
@@ -107,19 +88,8 @@ def _leer_agenda() -> AgendaData:
 
 
 def _guardar_agenda(data: AgendaData) -> None:
-    path = _agenda_local_path(force_download=False)
-    if not path:
-        st.error("⚠️ No se pudo acceder al almacenamiento de agenda en Google Drive.")
-        return
-    with open(path, "w", encoding="utf-8") as fh:
+    with open(AGENDA_PATH, "w", encoding="utf-8") as fh:
         json.dump(data, fh, ensure_ascii=False, indent=2)
-    storage = _storage()
-    if storage is None:
-        return
-    try:
-        storage.upload_local_path(path)
-    except RuntimeError as exc:
-        st.error(f"⚠️ No se pudo sincronizar la agenda con Google Drive: {exc}")
 
 
 def _key_fecha(fecha: datetime.date) -> str:
