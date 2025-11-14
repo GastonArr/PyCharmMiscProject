@@ -479,6 +479,46 @@ def render_admin_agenda(username: Optional[str], allowed_comisarias: Optional[Li
         " Puede actualizar cantidades o quitar delitos siempre que no tengan cargas registradas."
     )
 
+    st.markdown("#### Respaldo del calendario")
+    col_backup_download, col_backup_upload = st.columns(2)
+
+    with col_backup_download:
+        st.markdown("**Guardar calendario actual**")
+        agenda_actual = _leer_agenda()
+        backup_bytes = json.dumps(agenda_actual, ensure_ascii=False, indent=2).encode("utf-8")
+        timestamp = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        st.download_button(
+            label="📁 Descargar respaldo",
+            data=backup_bytes,
+            file_name=f"agenda_delitos_{timestamp}.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+        st.caption("Guarde una copia local del calendario actual para conservar un respaldo.")
+
+    with col_backup_upload:
+        st.markdown("**Cargar calendario desde archivo**")
+        uploaded_backup = st.file_uploader(
+            "Seleccione un archivo .json previamente guardado",
+            type=["json"],
+            key="agenda_admin_backup",
+        )
+        if uploaded_backup is not None:
+            try:
+                contenido = uploaded_backup.read()
+                data = json.loads(contenido.decode("utf-8"))
+            except UnicodeDecodeError:
+                st.error("El archivo no está codificado en UTF-8 válido.")
+            except json.JSONDecodeError:
+                st.error("El archivo seleccionado no contiene un JSON válido.")
+            else:
+                if not isinstance(data, dict):
+                    st.error("El respaldo debe contener un objeto JSON con el calendario completo.")
+                else:
+                    _guardar_agenda(data)
+                    st.success("Se restauró el calendario desde el archivo subido.")
+                    st.rerun()
+
     comisarias = allowed_comisarias or COMISARIA_OPTIONS
     comisaria_sel = st.selectbox(
         "Seleccione la comisaría a planificar",
