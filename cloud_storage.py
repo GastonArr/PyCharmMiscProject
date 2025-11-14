@@ -193,9 +193,13 @@ def _get_backend() -> StorageBackend:
 
 
 def _remote_name_for(local_path: str) -> str:
-    rel = os.path.relpath(local_path, BASE_DIR)
-    rel = rel.replace("\\", "/")
-    return rel.replace("/", "__")
+    """Return the Drive object name associated with a local file path.
+
+    We default to just the basename so that preexistentes archivos en la
+    carpeta compartida (por ejemplo los Excel ya subidos manualmente) sean
+    detectados y actualizados sin necesidad de renombrarlos."""
+
+    return os.path.basename(local_path)
 
 
 def ensure_local_file(local_path: str, remote_name: Optional[str] = None) -> None:
