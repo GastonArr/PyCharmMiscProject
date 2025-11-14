@@ -1,55 +1,27 @@
-import io
-import datetime
-import os
-
 import streamlit as st
 from openpyxl import load_workbook, Workbook
-
-import agenda_delitos       # gestión de almanaque de delitos asignados
+import os
+import datetime
 import direcciones          # módulo externo para pantalla de direcciones streamlit run app.py
 import Robos_Hurtos         # subflujo para delitos Robos/Hurtos
 import otros                # subflujo para Lesiones / Desaparición
-from drive_storage import get_storage, guess_mime_type
+import agenda_delitos       # gestión de almanaque de delitos asignados
 from login import render_login, render_user_header
 
 # ===========================
 # Config de rutas (en el repo)
 # ===========================
-def _storage_or_stop():
-    try:
-        return get_storage()
-    except RuntimeError as exc:
-        st.error(f"⚠️ {exc}")
-        st.stop()
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+EXCEL_DIR = os.path.join(BASE_DIR, "excel")  # carpeta local en el repo
+os.makedirs(EXCEL_DIR, exist_ok=True)
 
-
-def _default_excel_bytes() -> bytes:
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Hoja1"
-    buffer = io.BytesIO()
-    wb.save(buffer)
-    return buffer.getvalue()
-
-
-EXCEL_FILE_CANDIDATES = {
-    "Comisaria 14": ["comisaria 14.xlsm", "comisaria 14.xlsx", "comisaria 14.xls"],
-    "Comisaria 15": ["comisaria 15.xlsm", "comisaria 15.xlsx", "comisaria 15.xls"],
-    "Comisaria 6": ["comisaria 6.xlsm", "comisaria 6.xlsx", "comisaria 6.xls"],
-    "Comisaria 42": ["comisaria 42.xlsm", "comisaria 42.xlsx", "comisaria 42.xls"],
-    "Comisaria 9": ["comisaria 9.xlsm", "comisaria 9.xlsx", "comisaria 9.xls"],
-    "CENAF 4": ["CENAF 4.xlsm", "CENAF 4.xlsx", "CENAF 4.xls"],
-}
-
-
-def sincronizar_excel(path: str) -> bool:
-    storage = _storage_or_stop()
-    try:
-        storage.upload_local_path(path)
-    except RuntimeError as exc:
-        st.error(f"⚠️ No se pudo sincronizar el Excel con Google Drive: {exc}")
-        return False
-    return True
+# Bases SIN extensión (usamos resolve_excel_path para elegir .xlsm/.xlsx/.xls)
+excel_base_comisaria_14 = os.path.join(EXCEL_DIR, "comisaria 14")
+excel_base_comisaria_15 = os.path.join(EXCEL_DIR, "comisaria 15")
+excel_base_comisaria_6  = os.path.join(EXCEL_DIR, "comisaria 6")
+excel_base_comisaria_42 = os.path.join(EXCEL_DIR, "comisaria 42")
+excel_base_comisaria_9  = os.path.join(EXCEL_DIR, "comisaria 9")
+excel_base_cenaf_4      = os.path.join(EXCEL_DIR, "CENAF 4")
 
 # ---------------------------
 # Utilidades
@@ -58,21 +30,30 @@ def sincronizar_excel(path: str) -> bool:
 def is_xlsm(path: str) -> bool:
     return path.lower().endswith(".xlsm")
 
-def resolve_remote_excel_name(nombre_comisaria: str) -> str:
-    storage = _storage_or_stop()
-    candidates = EXCEL_FILE_CANDIDATES.get(nombre_comisaria, EXCEL_FILE_CANDIDATES["CENAF 4"])
-    for cand in candidates:
-        if storage.file_exists(cand):
+def resolve_excel_path(base_without_ext: str) -> str:
+    """
+    Devuelve el archivo existente entre: .xlsm, .xlsx, .xls (en ese orden).
+    Si no existe ninguno, devuelve base + '.xlsm'.
+    """
+    for ext in (".xlsm", ".xlsx", ".xls"):
+        cand = base_without_ext + ext
+        if os.path.exists(cand):
             return cand
-    return candidates[0]
+    return base_without_ext + ".xlsm"
 
 def asegurar_excel(path: str):
-    storage = _storage_or_stop()
-    try:
-        storage.ensure_local_path(path)
-    except RuntimeError as exc:
-        st.error(f"⚠️ {exc}")
-        st.stop()
+    """
+    Crea el archivo si no existe (xlsx o xlsm según la extensión).
+    No crea macros; si el archivo ya tiene macros, se conservarán con keep_vba=True al cargar/guardar.
+    """
+    carpeta = os.path.dirname(path)
+    if carpeta and not os.path.exists(carpeta):
+        os.makedirs(carpeta, exist_ok=True)
+    if not os.path.exists(path):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Hoja1"
+        wb.save(path)
 
 def cargar_libro(path: str):
     """
@@ -127,7 +108,7 @@ def escribir_registro(path: str, fila: int, hecho, delito,
         ws[f"X{fila}"].value  = unwrap_quotes(delito)
         ws[f"R{fila}"].value  = unwrap_quotes(actuacion)
         wb.save(path)
-        return sincronizar_excel(path)
+        return True
     except PermissionError:
         st.error("⚠️ No se pudo guardar porque el archivo está abierto en Excel con bloqueo de escritura. Cerrá el archivo y probá de nuevo.")
         return False
@@ -145,15 +126,19 @@ def excel_path_por_comisaria(nombre_comisaria: str) -> str:
     Devuelve el path del Excel (con extensión) según la comisaría seleccionada,
     resolviendo la extensión existente o creando .xlsm si no hay.
     """
-    remote_name = resolve_remote_excel_name(nombre_comisaria)
-    storage = _storage_or_stop()
-    local_path = storage.ensure_local_file(
-        remote_name,
-        default=_default_excel_bytes,
-        mime_type=guess_mime_type(remote_name),
-        force_download=True,
-    )
-    return local_path
+    if nombre_comisaria == "Comisaria 14":
+        base = excel_base_comisaria_14
+    elif nombre_comisaria == "Comisaria 15":
+        base = excel_base_comisaria_15
+    elif nombre_comisaria == "Comisaria 6":
+        base = excel_base_comisaria_6
+    elif nombre_comisaria == "Comisaria 42":
+        base = excel_base_comisaria_42
+    elif nombre_comisaria == "Comisaria 9":
+        base = excel_base_comisaria_9
+    else:  # "CENAF 4"
+        base = excel_base_cenaf_4
+    return resolve_excel_path(base)
 
 # ---------------------------
 # Estado de sesión
@@ -261,7 +246,7 @@ if st.session_state.step == 1:
                 use_container_width=True,
             )
         except Exception as e:
-                st.caption(f"⚠️ No se pudo preparar la descarga: {e}")
+            st.caption(f"⚠️ No se pudo preparar la descarga: {e}")
 
         # Uploader: exige que el nombre del archivo subido sea EXACTAMENTE el esperado
         st.markdown("— o —")
@@ -279,10 +264,7 @@ if st.session_state.step == 1:
                 try:
                     with open(excel_path_preview, "wb") as f:
                         f.write(uploaded.getbuffer())
-                    if sincronizar_excel(excel_path_preview):
-                        st.success(f"Se reemplazó el Excel de {comisaria}: {expected_name}")
-                    else:
-                        st.stop()
+                    st.success(f"Se reemplazó el Excel de {comisaria}: {expected_name}")
                 except Exception as e:
                     st.error(f"No se pudo guardar el archivo: {e}")
 
@@ -747,8 +729,6 @@ elif st.session_state.step == 6:
                         ws_dir[C("N")].value = unwrap_quotes(link)
 
                     wb_dir.save(st.session_state.excel_path)
-                    if not sincronizar_excel(st.session_state.excel_path):
-                        st.stop()
 
                 except PermissionError:
                     st.error("⚠️ No se pudo guardar Direcciones: el archivo está abierto en Excel.")
@@ -844,8 +824,6 @@ elif st.session_state.step == 6:
                     if es not in (None, ""): ws_rh[C("BK")].value = unwrap_quotes(str(es).strip())
 
                     wb_rh.save(st.session_state.excel_path)
-                    if not sincronizar_excel(st.session_state.excel_path):
-                        st.stop()
 
                 except PermissionError:
                     st.error("⚠️ No se pudo guardar Robos/Hurtos: el archivo está abierto en Excel.")
@@ -895,8 +873,6 @@ elif st.session_state.step == 6:
                         ws_o[C("BA")].value = unwrap_quotes(str(oprev.get("aparecio")).strip())
 
                     wb_o.save(st.session_state.excel_path)
-                    if not sincronizar_excel(st.session_state.excel_path):
-                        st.stop()
 
                 except PermissionError:
                     st.error("⚠️ No se pudo guardar Otros: el archivo está abierto en Excel.")
