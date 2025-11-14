@@ -38,7 +38,7 @@ def resolve_excel_path(base_without_ext: str) -> str:
     """
     for ext in (".xlsm", ".xlsx", ".xls"):
         cand = base_without_ext + ext
-        cloud_storage.ensure_local_file(cand)
+        cloud_storage.ensure_local_file(cand, **cloud_storage.get_remote_params(cand))
         if os.path.exists(cand):
             return cand
     return base_without_ext + ".xlsm"
@@ -48,7 +48,8 @@ def asegurar_excel(path: str):
     Crea el archivo si no existe (xlsx o xlsm según la extensión).
     No crea macros; si el archivo ya tiene macros, se conservarán con keep_vba=True al cargar/guardar.
     """
-    cloud_storage.ensure_local_file(path)
+    params = cloud_storage.get_remote_params(path)
+    cloud_storage.ensure_local_file(path, **params)
     carpeta = os.path.dirname(path)
     if carpeta and not os.path.exists(carpeta):
         os.makedirs(carpeta, exist_ok=True)
@@ -57,7 +58,7 @@ def asegurar_excel(path: str):
         ws = wb.active
         ws.title = "Hoja1"
         wb.save(path)
-        cloud_storage.sync_local_to_remote(path)
+        cloud_storage.sync_local_to_remote(path, **params)
 
 def cargar_libro(path: str):
     """
@@ -98,6 +99,7 @@ def escribir_registro(path: str, fila: int, hecho, delito,
     """
     Escribe datos en: C,D,E,F,H,Q,AF,BL,X,R (sin tocar A).
     """
+    params = cloud_storage.get_remote_params(path)
     wb = cargar_libro(path)
     ws = wb.active
     try:
@@ -112,7 +114,7 @@ def escribir_registro(path: str, fila: int, hecho, delito,
         ws[f"X{fila}"].value  = unwrap_quotes(delito)
         ws[f"R{fila}"].value  = unwrap_quotes(actuacion)
         wb.save(path)
-        cloud_storage.sync_local_to_remote(path)
+        cloud_storage.sync_local_to_remote(path, **params)
         return True
     except PermissionError:
         st.error("⚠️ No se pudo guardar porque el archivo está abierto en Excel con bloqueo de escritura. Cerrá el archivo y probá de nuevo.")
@@ -705,6 +707,7 @@ elif st.session_state.step == 6:
                 try:
                     wb_dir = cargar_libro(st.session_state.excel_path)
                     ws_dir = wb_dir.active
+                    excel_params = cloud_storage.get_remote_params(st.session_state.excel_path)
                     C = lambda col: f"{col}{fila}"
 
                     # I{fila}: ciudad/código según comisaría
@@ -734,7 +737,9 @@ elif st.session_state.step == 6:
                         ws_dir[C("N")].value = unwrap_quotes(link)
 
                     wb_dir.save(st.session_state.excel_path)
-                    cloud_storage.sync_local_to_remote(st.session_state.excel_path)
+                    cloud_storage.sync_local_to_remote(
+                        st.session_state.excel_path, **excel_params
+                    )
 
                 except PermissionError:
                     st.error("⚠️ No se pudo guardar Direcciones: el archivo está abierto en Excel.")
@@ -749,6 +754,7 @@ elif st.session_state.step == 6:
                 try:
                     wb_rh = cargar_libro(st.session_state.excel_path)
                     ws_rh = wb_rh.active
+                    excel_params = cloud_storage.get_remote_params(st.session_state.excel_path)
                     C = lambda col: f"{col}{fila}"
 
                     # -------- Víctimas (AO total) + por sexo (AG/AH/AI)
@@ -830,7 +836,9 @@ elif st.session_state.step == 6:
                     if es not in (None, ""): ws_rh[C("BK")].value = unwrap_quotes(str(es).strip())
 
                     wb_rh.save(st.session_state.excel_path)
-                    cloud_storage.sync_local_to_remote(st.session_state.excel_path)
+                    cloud_storage.sync_local_to_remote(
+                        st.session_state.excel_path, **excel_params
+                    )
 
                 except PermissionError:
                     st.error("⚠️ No se pudo guardar Robos/Hurtos: el archivo está abierto en Excel.")
@@ -845,6 +853,7 @@ elif st.session_state.step == 6:
                 try:
                     wb_o = cargar_libro(st.session_state.excel_path)
                     ws_o = wb_o.active
+                    excel_params = cloud_storage.get_remote_params(st.session_state.excel_path)
                     C = lambda col: f"{col}{fila}"
 
                     # Limpiar AO/AG/AH/AI por seguridad (si reescriben tras editar)
@@ -880,7 +889,9 @@ elif st.session_state.step == 6:
                         ws_o[C("BA")].value = unwrap_quotes(str(oprev.get("aparecio")).strip())
 
                     wb_o.save(st.session_state.excel_path)
-                    cloud_storage.sync_local_to_remote(st.session_state.excel_path)
+                    cloud_storage.sync_local_to_remote(
+                        st.session_state.excel_path, **excel_params
+                    )
 
                 except PermissionError:
                     st.error("⚠️ No se pudo guardar Otros: el archivo está abierto en Excel.")

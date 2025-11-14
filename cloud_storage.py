@@ -25,6 +25,19 @@ except Exception:  # pragma: no cover - gracefully degrade when libs missing.
 
 LOGGER = logging.getLogger(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Tabla opcional que permite mapear cada archivo local a su metadata remota.
+#
+# Ejemplo de uso:
+# COMISARIA_REMOTE_FILES = {
+#     "excel/comisaria 14.xlsm": {
+#         "file_id": "1AbCdEfGhIjKlMnOp",  # ID del archivo compartido en Drive
+#         # "remote_name": "Comisaria 14.xlsm",  # opcional, por defecto se usa el basename local
+#     },
+# }
+#
+# Se puede dejar vacía si todavía no se conoce el ID de un archivo.
+COMISARIA_REMOTE_FILES: Dict[str, Dict[str, str]] = {}
 SCOPES = [
     "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/drive.file",
@@ -40,20 +53,28 @@ class StorageConfig:
 class StorageBackend:
     """Abstract storage backend."""
 
-    def ensure_local_file(self, local_path: str, remote_name: str) -> None:
+    def ensure_local_file(
+        self, local_path: str, remote_name: str, file_id: Optional[str]
+    ) -> None:
         raise NotImplementedError
 
-    def sync_local_to_remote(self, local_path: str, remote_name: str) -> None:
+    def sync_local_to_remote(
+        self, local_path: str, remote_name: str, file_id: Optional[str]
+    ) -> None:
         raise NotImplementedError
 
 
 class LocalBackend(StorageBackend):
     """No-op backend when Google Drive credentials are not configured."""
 
-    def ensure_local_file(self, local_path: str, remote_name: str) -> None:  # pragma: no cover - trivial
+    def ensure_local_file(  # pragma: no cover - trivial
+        self, local_path: str, remote_name: str, file_id: Optional[str]
+    ) -> None:
         LOGGER.debug("Local backend in use; skipping download for %s", remote_name)
 
-    def sync_local_to_remote(self, local_path: str, remote_name: str) -> None:  # pragma: no cover - trivial
+    def sync_local_to_remote(  # pragma: no cover - trivial
+        self, local_path: str, remote_name: str, file_id: Optional[str]
+    ) -> None:
         LOGGER.debug("Local backend in use; skipping upload for %s", remote_name)
 
 
@@ -72,10 +93,14 @@ class GoogleDriveBackend(StorageBackend):
         self._folder_id = config.folder_id
         self._file_cache: Dict[str, Optional[str]] = {}
 
+    def _cache_key(self, remote_name: str) -> str:
+        return f"name:{remote_name}"
+
     # --------------- Internal helpers ---------------
     def _find_file_id(self, remote_name: str) -> Optional[str]:
-        if remote_name in self._file_cache:
-            return self._file_cache[remote_name]
+        cache_key = self._cache_key(remote_name)
+        if cache_key in self._file_cache:
+            return self._file_cache[cache_key]
         escaped_name = remote_name.replace("'", "\\'")
         query = f"name = '{escaped_name}' and '{self._folder_id}' in parents and trashed = false"
         result = (
@@ -85,7 +110,7 @@ class GoogleDriveBackend(StorageBackend):
         )
         files = result.get("files", [])
         file_id = files[0]["id"] if files else None
-        self._file_cache[remote_name] = file_id
+        self._file_cache[cache_key] = file_id
         return file_id
 
     def _download_bytes(self, file_id: str) -> bytes:
@@ -107,22 +132,28 @@ class GoogleDriveBackend(StorageBackend):
             ".txt": "text/plain",
         }.get(ext, "application/octet-stream")
 
-    def _upload_bytes(self, file_id: Optional[str], remote_name: str, data: bytes, mime_type: str) -> None:
+    def _upload_bytes(
+        self, file_id: Optional[str], remote_name: str, data: bytes, mime_type: str
+    ) -> None:
         media = MediaIoBaseUpload(io.BytesIO(data), mimetype=mime_type, resumable=False)
         if file_id:
             self._service.files().update(fileId=file_id, media_body=media).execute()
         else:
             metadata = {"name": remote_name, "parents": [self._folder_id]}
             file = self._service.files().create(body=metadata, media_body=media, fields="id").execute()
-            self._file_cache[remote_name] = file.get("id")
+            self._file_cache[self._cache_key(remote_name)] = file.get("id")
 
     # --------------- Public API ---------------
-    def ensure_local_file(self, local_path: str, remote_name: str) -> None:
+    def ensure_local_file(
+        self, local_path: str, remote_name: str, file_id: Optional[str]
+    ) -> None:
         try:
-            file_id = self._find_file_id(remote_name)
-            if not file_id:
+            effective_id = file_id or self._find_file_id(remote_name)
+            if not effective_id:
                 return
-            data = self._download_bytes(file_id)
+            data = self._download_bytes(effective_id)
+            if file_id:
+                self._file_cache[self._cache_key(remote_name)] = effective_id
         except HttpError as exc:  # pragma: no cover - depends on network
             LOGGER.warning("No se pudo descargar %s desde Google Drive: %s", remote_name, exc)
             return
@@ -130,15 +161,19 @@ class GoogleDriveBackend(StorageBackend):
         with open(local_path, "wb") as fh:
             fh.write(data)
 
-    def sync_local_to_remote(self, local_path: str, remote_name: str) -> None:
+    def sync_local_to_remote(
+        self, local_path: str, remote_name: str, file_id: Optional[str]
+    ) -> None:
         if not os.path.exists(local_path):
             return
         try:
             with open(local_path, "rb") as fh:
                 data = fh.read()
-            file_id = self._find_file_id(remote_name)
+            effective_id = file_id or self._find_file_id(remote_name)
             mime_type = self._guess_mime_type(local_path)
-            self._upload_bytes(file_id, remote_name, data, mime_type)
+            self._upload_bytes(effective_id, remote_name, data, mime_type)
+            if file_id and effective_id:
+                self._file_cache[self._cache_key(remote_name)] = effective_id
         except HttpError as exc:  # pragma: no cover - depends on network
             LOGGER.warning("No se pudo subir %s a Google Drive: %s", remote_name, exc)
 
@@ -192,21 +227,69 @@ def _get_backend() -> StorageBackend:
     return _BACKEND
 
 
-def _remote_name_for(local_path: str) -> str:
-    """Return the Drive object name associated with a local file path.
+def _normalize_local_key(local_path: str) -> str:
+    rel = os.path.relpath(local_path, BASE_DIR)
+    return rel.replace(os.sep, "/")
 
-    We default to just the basename so that preexistentes archivos en la
-    carpeta compartida (por ejemplo los Excel ya subidos manualmente) sean
-    detectados y actualizados sin necesidad de renombrarlos."""
 
+def _lookup_remote_entry(local_path: str) -> Dict[str, str]:
+    key = _normalize_local_key(local_path)
+    return COMISARIA_REMOTE_FILES.get(key, {})
+
+
+def _remote_name_for(local_path: str, override: Optional[str]) -> str:
+    if override:
+        return override
+    entry = _lookup_remote_entry(local_path)
+    if "remote_name" in entry:
+        return entry["remote_name"]
     return os.path.basename(local_path)
 
 
-def ensure_local_file(local_path: str, remote_name: Optional[str] = None) -> None:
-    remote = remote_name or _remote_name_for(local_path)
-    _get_backend().ensure_local_file(local_path, remote)
+def _file_id_for(local_path: str, override: Optional[str]) -> Optional[str]:
+    if override:
+        return override
+    entry = _lookup_remote_entry(local_path)
+    return entry.get("file_id")
 
 
-def sync_local_to_remote(local_path: str, remote_name: Optional[str] = None) -> None:
-    remote = remote_name or _remote_name_for(local_path)
-    _get_backend().sync_local_to_remote(local_path, remote)
+def ensure_local_file(
+    local_path: str,
+    remote_name: Optional[str] = None,
+    file_id: Optional[str] = None,
+) -> None:
+    remote = _remote_name_for(local_path, remote_name)
+    resolved_id = _file_id_for(local_path, file_id)
+    _get_backend().ensure_local_file(local_path, remote, resolved_id)
+
+
+def sync_local_to_remote(
+    local_path: str,
+    remote_name: Optional[str] = None,
+    file_id: Optional[str] = None,
+) -> None:
+    remote = _remote_name_for(local_path, remote_name)
+    resolved_id = _file_id_for(local_path, file_id)
+    _get_backend().sync_local_to_remote(local_path, remote, resolved_id)
+
+
+def get_remote_file_id(local_path: str) -> Optional[str]:
+    """Devuelve el file_id configurado para el archivo local (si existe)."""
+
+    return _file_id_for(local_path, None)
+
+
+def get_remote_name(local_path: str) -> str:
+    """Devuelve el nombre remoto configurado para el archivo local."""
+
+    return _remote_name_for(local_path, None)
+
+
+def get_remote_params(local_path: str) -> Dict[str, str]:
+    """Devuelve kwargs listos para pasar a ensure/sync con nombre e ID."""
+
+    params: Dict[str, str] = {"remote_name": get_remote_name(local_path)}
+    file_id = get_remote_file_id(local_path)
+    if file_id:
+        params["file_id"] = file_id
+    return params
