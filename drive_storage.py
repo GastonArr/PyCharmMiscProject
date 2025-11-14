@@ -46,15 +46,6 @@ class DriveStorage:
     def from_streamlit_secrets(cls) -> "DriveStorage":
         config = dict(st.secrets.get("drive", {}))
 
-        def _secrets_get(key: str) -> Optional[Union[str, dict]]:
-            try:
-                return st.secrets[key]
-            except Exception:
-                try:
-                    return st.secrets.get(key)  # type: ignore[attr-defined]
-                except Exception:
-                    return None
-
         def _load_json_candidate(
             candidate: Optional[str], *, source: str, allow_missing_path: bool = False
         ) -> Optional[dict]:
@@ -73,79 +64,48 @@ class DriveStorage:
                 )
 
         def _load_service_account() -> Optional[dict]:
-            parsed: Optional[dict] = None
-
-            def _try_parse(value: Union[str, dict, None], *, source: str) -> Optional[dict]:
-                if value is None:
-                    return None
-                if isinstance(value, dict):
-                    return value
-                if isinstance(value, str):
-                    return _load_json_candidate(
-                        value, source=source, allow_missing_path=False
-                    )
-                return None
-
             direct = config.get("service_account") or config.get("service_account_json")
-            parsed = _try_parse(direct, source="drive.service_account")
+            if isinstance(direct, dict):
+                return direct
+            if isinstance(direct, str):
+                parsed = _load_json_candidate(
+                    direct, source="drive.service_account", allow_missing_path=False
+                )
+                if parsed is not None:
+                    return parsed
+
+            secrets_json = st.secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON")
+            parsed: Optional[dict] = None
+            if isinstance(secrets_json, str):
+                parsed = _load_json_candidate(
+                    secrets_json,
+                    source="GOOGLE_SERVICE_ACCOUNT_JSON (st.secrets)",
+                    allow_missing_path=False,
+                )
             if parsed is not None:
                 return parsed
 
-            secrets_flat: Dict[str, Union[str, dict]] = {}
-            try:
-                secrets_flat = dict(st.secrets)
-            except Exception:
-                pass
+            env_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+            parsed = _load_json_candidate(
+                env_json,
+                source="GOOGLE_SERVICE_ACCOUNT_JSON",
+                allow_missing_path=False,
+            )
+            if parsed is not None:
+                return parsed
 
-            additional_keys = [
-                "drive.service_account",
-                "drive_service_account",
-                "drive_service_account_json",
-                "GOOGLE_SERVICE_ACCOUNT_JSON",
-                "GOOGLE_SERVICE_ACCOUNT",
-                "SERVICE_ACCOUNT_JSON",
-                "SERVICE_ACCOUNT",
-            ]
-
-            for key in additional_keys:
-                value = config.get(key) or secrets_flat.get(key) or _secrets_get(key)
-                parsed = _try_parse(value, source=key)
-                if parsed is not None:
-                    return parsed
-
-            env_keys = [
-                "GOOGLE_SERVICE_ACCOUNT_JSON",
-                "GOOGLE_SERVICE_ACCOUNT",
-                "SERVICE_ACCOUNT_JSON",
-                "SERVICE_ACCOUNT",
-            ]
-            for key in env_keys:
-                parsed = _try_parse(os.getenv(key), source=key)
-                if parsed is not None:
-                    return parsed
-
-            path_keys = [
-                "service_account_file",
-                "drive_service_account_file",
-                "GOOGLE_SERVICE_ACCOUNT_FILE",
-                "SERVICE_ACCOUNT_FILE",
-                "GOOGLE_APPLICATION_CREDENTIALS",
-            ]
-            for key in path_keys:
-                candidate = config.get(key) or secrets_flat.get(key) or _secrets_get(key)
-                if not candidate:
-                    candidate = os.getenv(key)
-                if not candidate:
-                    continue
-                if not isinstance(candidate, str):
-                    continue
-                if not os.path.exists(candidate):
+            path = (
+                config.get("service_account_file")
+                or st.secrets.get("GOOGLE_SERVICE_ACCOUNT_FILE")
+                or os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE")
+            )
+            if isinstance(path, str):
+                if not os.path.exists(path):
                     raise RuntimeError(
-                        f"La ruta indicada para el service account no existe: {candidate}."
+                        f"La ruta indicada para el service account no existe: {path}."
                     )
-                with open(candidate, "r", encoding="utf-8") as fh:
+                with open(path, "r", encoding="utf-8") as fh:
                     return json.load(fh)
-
             return None
 
         def _parse_folder_id(value: Optional[str]) -> Optional[str]:
@@ -172,8 +132,7 @@ class DriveStorage:
         if service_account_info is None:
             raise RuntimeError(
                 "Falta la configuración de Google Drive. "
-                "Defina drive.service_account en secrets, GOOGLE_SERVICE_ACCOUNT_JSON/FILE, "
-                "SERVICE_ACCOUNT_JSON/FILE, GOOGLE_APPLICATION_CREDENTIALS "
+                "Defina drive.service_account en secrets, GOOGLE_SERVICE_ACCOUNT_JSON/FILE "
                 "o comparta un JSON válido mediante variables de entorno."
             )
 
