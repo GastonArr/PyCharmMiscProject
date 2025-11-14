@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Tuple
 import streamlit as st
 
 from login import COMISARIA_OPTIONS
+import cloud_storage
 
 # ===========================
 # Configuración básica
@@ -75,6 +76,7 @@ def es_admin(username: Optional[str], allowed_comisarias: Optional[List[str]]) -
 
 
 def _leer_agenda() -> AgendaData:
+    cloud_storage.ensure_local_file(AGENDA_PATH)
     if not os.path.exists(AGENDA_PATH):
         return {}
     try:
@@ -90,6 +92,7 @@ def _leer_agenda() -> AgendaData:
 def _guardar_agenda(data: AgendaData) -> None:
     with open(AGENDA_PATH, "w", encoding="utf-8") as fh:
         json.dump(data, fh, ensure_ascii=False, indent=2)
+    cloud_storage.sync_local_to_remote(AGENDA_PATH)
 
 
 def _key_fecha(fecha: datetime.date) -> str:
