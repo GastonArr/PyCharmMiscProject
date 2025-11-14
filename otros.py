@@ -26,7 +26,8 @@ def is_xlsm(path: str) -> bool:
     return path.lower().endswith(".xlsm")
 
 def asegurar_excel(path: str):
-    cloud_storage.ensure_local_file(path)
+    params = cloud_storage.get_remote_params(path)
+    cloud_storage.ensure_local_file(path, **params)
     carpeta = os.path.dirname(path)
     if carpeta and not os.path.exists(carpeta):
         os.makedirs(carpeta, exist_ok=True)
@@ -35,7 +36,7 @@ def asegurar_excel(path: str):
         ws = wb.active
         ws.title = "Hoja1"
         wb.save(path)
-        cloud_storage.sync_local_to_remote(path)
+        cloud_storage.sync_local_to_remote(path, **params)
 
 def cargar_libro(path: str):
     asegurar_excel(path)
