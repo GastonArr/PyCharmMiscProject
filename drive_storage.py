@@ -44,129 +44,29 @@ class DriveStorage:
     # ---------- Construction ----------
     @classmethod
     def from_streamlit_secrets(cls) -> "DriveStorage":
-        config = dict(st.secrets.get("drive", {}))
-
-        def _load_json_candidate(
-            candidate: Optional[str], *, source: str, allow_missing_path: bool = False
-        ) -> Optional[dict]:
-            if not candidate:
-                return None
-            try:
-                return json.loads(candidate)
-            except json.JSONDecodeError:
-                if os.path.exists(candidate):
-                    with open(candidate, "r", encoding="utf-8") as fh:
-                        return json.load(fh)
-                if allow_missing_path:
-                    return None
-                raise RuntimeError(
-                    f"El valor de {source} no es JSON válido ni un path existente."
-                )
-
-        def _load_service_account() -> Optional[dict]:
-            direct = config.get("service_account") or config.get("service_account_json")
-            if isinstance(direct, dict):
-                return direct
-            if isinstance(direct, str):
-                parsed = _load_json_candidate(
-                    direct, source="drive.service_account", allow_missing_path=False
-                )
-                if parsed is not None:
-                    return parsed
-
-            secrets_json = st.secrets.get("GOOGLE_SERVICE_ACCOUNT_JSON")
-            parsed: Optional[dict] = None
-            if isinstance(secrets_json, str):
-                parsed = _load_json_candidate(
-                    secrets_json,
-                    source="GOOGLE_SERVICE_ACCOUNT_JSON (st.secrets)",
-                    allow_missing_path=False,
-                )
-            if parsed is not None:
-                return parsed
-
-            env_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
-            parsed = _load_json_candidate(
-                env_json,
-                source="GOOGLE_SERVICE_ACCOUNT_JSON",
-                allow_missing_path=False,
-            )
-            if parsed is not None:
-                return parsed
-
-            path = (
-                config.get("service_account_file")
-                or st.secrets.get("GOOGLE_SERVICE_ACCOUNT_FILE")
-                or os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE")
-            )
-            if isinstance(path, str):
-                if not os.path.exists(path):
-                    raise RuntimeError(
-                        f"La ruta indicada para el service account no existe: {path}."
-                    )
-                with open(path, "r", encoding="utf-8") as fh:
-                    return json.load(fh)
-            return None
-
-        def _parse_folder_id(value: Optional[str]) -> Optional[str]:
-            if not value:
-                return None
-            value = value.strip()
-            if "/" not in value and "google" not in value:
-                return value
-            # Links con forma https://drive.google.com/drive/folders/<id>
-            parts = value.split("/")
-            try:
-                idx = parts.index("folders")
-                if idx + 1 < len(parts):
-                    return parts[idx + 1].split("?")[0]
-            except ValueError:
-                pass
-            # Links con ?id=<id>
-            if "id=" in value:
-                after = value.split("id=")[1]
-                return after.split("&")[0]
-            return value
-
-        service_account_info = _load_service_account()
-        if service_account_info is None:
+        config = st.secrets.get("drive")
+        if not config:
             raise RuntimeError(
-                "Falta la configuración de Google Drive. "
-                "Defina drive.service_account en secrets, GOOGLE_SERVICE_ACCOUNT_JSON/FILE "
-                "o comparta un JSON válido mediante variables de entorno."
+                "Falta la configuración de Google Drive en st.secrets['drive']. "
+                "Defina al menos 'service_account' y 'folder_id'."
             )
 
-        scopes = config.get("scopes")
-        if scopes is None:
-            secrets_scopes = st.secrets.get("GOOGLE_DRIVE_SCOPES")
-            scopes_env = (
-                secrets_scopes if isinstance(secrets_scopes, str) else None
-            ) or os.getenv("GOOGLE_DRIVE_SCOPES")
-            if scopes_env:
-                scopes = [s.strip() for s in scopes_env.split(",") if s.strip()]
-            else:
-                scopes = ["https://www.googleapis.com/auth/drive"]
-        elif isinstance(scopes, str):
-            scopes = [s.strip() for s in scopes.split(",") if s.strip()]
+        service_account_info = config.get("service_account")
+        if service_account_info is None:
+            raise RuntimeError("La configuración de Google Drive debe incluir 'service_account'.")
+        if isinstance(service_account_info, str):
+            service_account_info = json.loads(service_account_info)
+
+        scopes = config.get(
+            "scopes",
+            ["https://www.googleapis.com/auth/drive"],
+        )
         credentials = Credentials.from_service_account_info(service_account_info, scopes=scopes)
         service = build("drive", "v3", credentials=credentials)
 
-        folder_id = _parse_folder_id(config.get("folder_id"))
+        folder_id = config.get("folder_id")
         if not folder_id:
-            folder_id = _parse_folder_id(config.get("folder"))
-        if not folder_id:
-            folder_id = _parse_folder_id(config.get("folder_url"))
-        if not folder_id:
-            secrets_folder = st.secrets.get("GOOGLE_DRIVE_FOLDER_ID")
-            if isinstance(secrets_folder, str):
-                folder_id = _parse_folder_id(secrets_folder)
-        if not folder_id:
-            folder_id = _parse_folder_id(os.getenv("GOOGLE_DRIVE_FOLDER_ID"))
-        if not folder_id:
-            raise RuntimeError(
-                "Falta 'folder_id'. Defínalo en drive.folder_id, GOOGLE_DRIVE_FOLDER_ID "
-                "o indique la URL de la carpeta compartida."
-            )
+            raise RuntimeError("La configuración de Google Drive debe incluir 'folder_id'.")
 
         return cls(service, folder_id)
 
