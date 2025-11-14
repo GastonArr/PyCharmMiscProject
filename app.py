@@ -182,6 +182,10 @@ render_user_header()
 
 # Validar que la comisaría seleccionada (si existe) sea permitida
 allowed_comisarias = st.session_state.allowed_comisarias or []
+usuario_es_admin = agenda_delitos.es_admin(
+    st.session_state.username,
+    allowed_comisarias,
+)
 
 # Panel de administración del almanaque (solo usuarios habilitados)
 agenda_delitos.render_admin_agenda(st.session_state.username, allowed_comisarias)
@@ -248,25 +252,26 @@ if st.session_state.step == 1:
         except Exception as e:
             st.caption(f"⚠️ No se pudo preparar la descarga: {e}")
 
-        # Uploader: exige que el nombre del archivo subido sea EXACTAMENTE el esperado
-        st.markdown("— o —")
-        expected_name = os.path.basename(excel_path_preview)
-        uploaded = st.file_uploader(
-            f"Subir/Reemplazar Excel (nombre requerido: **{expected_name}**)",
-            type=["xlsm", "xlsx", "xls"],
-            key="uploader_excel"
-        )
-        if uploaded is not None:
-            if uploaded.name != expected_name:
-                st.error(f"El archivo debe llamarse **{expected_name}**. Renombralo y volvé a subirlo para evitar conflictos.")
-            else:
-                # Guardar lo subido SOBRE el archivo target
-                try:
-                    with open(excel_path_preview, "wb") as f:
-                        f.write(uploaded.getbuffer())
-                    st.success(f"Se reemplazó el Excel de {comisaria}: {expected_name}")
-                except Exception as e:
-                    st.error(f"No se pudo guardar el archivo: {e}")
+        if usuario_es_admin:
+            # Uploader: exige que el nombre del archivo subido sea EXACTAMENTE el esperado
+            st.markdown("— o —")
+            expected_name = os.path.basename(excel_path_preview)
+            uploaded = st.file_uploader(
+                f"Subir/Reemplazar Excel (nombre requerido: **{expected_name}**)",
+                type=["xlsm", "xlsx", "xls"],
+                key="uploader_excel"
+            )
+            if uploaded is not None:
+                if uploaded.name != expected_name:
+                    st.error(f"El archivo debe llamarse **{expected_name}**. Renombralo y volvé a subirlo para evitar conflictos.")
+                else:
+                    # Guardar lo subido SOBRE el archivo target
+                    try:
+                        with open(excel_path_preview, "wb") as f:
+                            f.write(uploaded.getbuffer())
+                        st.success(f"Se reemplazó el Excel de {comisaria}: {expected_name}")
+                    except Exception as e:
+                        st.error(f"No se pudo guardar el archivo: {e}")
 
     with col_next:
         if st.button("Siguiente", use_container_width=True):
