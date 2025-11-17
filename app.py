@@ -1,70 +1,66 @@
-import datetime
-import os
-import tempfile
-
 import streamlit as st
-from openpyxl import Workbook, load_workbook
-
-import agenda_delitos       # gestión de almanaque de delitos asignados
+from openpyxl import load_workbook, Workbook
+import os
+import datetime
 import direcciones          # módulo externo para pantalla de direcciones streamlit run app.py
 import Robos_Hurtos         # subflujo para delitos Robos/Hurtos
 import otros                # subflujo para Lesiones / Desaparición
-from cloud_storage import download_blob_to_tempfile, upload_bytes_to_blob, upload_file_to_blob
+import agenda_delitos       # gestión de almanaque de delitos asignados
 from login import render_login, render_user_header
 
 # ===========================
-# Config de almacenamiento en GCS
+# Config de rutas (en el repo)
 # ===========================
-GCS_BUCKET = os.getenv("GCS_BUCKET_NAME", "proyecto-operaciones-storage")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+EXCEL_DIR = os.path.join(BASE_DIR, "excel")  # carpeta local en el repo
+os.makedirs(EXCEL_DIR, exist_ok=True)
 
-EXCEL_BLOBS = {
-    "Comisaria 14": "excel/comisaria 14.xlsm",
-    "Comisaria 15": "excel/comisaria 15.xlsm",
-    "Comisaria 6": "excel/comisaria 6.xlsm",
-    "Comisaria 42": "excel/comisaria 42.xlsm",
-    "Comisaria 9": "excel/comisaria 9.xlsm",
-    "CENAF 4": "excel/CENAF 4.xlsm",
-}
+# Bases SIN extensión (usamos resolve_excel_path para elegir .xlsm/.xlsx/.xls)
+excel_base_comisaria_14 = os.path.join(EXCEL_DIR, "comisaria 14")
+excel_base_comisaria_15 = os.path.join(EXCEL_DIR, "comisaria 15")
+excel_base_comisaria_6  = os.path.join(EXCEL_DIR, "comisaria 6")
+excel_base_comisaria_42 = os.path.join(EXCEL_DIR, "comisaria 42")
+excel_base_comisaria_9  = os.path.join(EXCEL_DIR, "comisaria 9")
+excel_base_cenaf_4      = os.path.join(EXCEL_DIR, "CENAF 4")
 
 # ---------------------------
 # Utilidades
 # ---------------------------
 
-
 def is_xlsm(path: str) -> bool:
     return path.lower().endswith(".xlsm")
 
-
-def excel_blob_por_comisaria(nombre_comisaria: str) -> str:
-    return EXCEL_BLOBS.get(nombre_comisaria, EXCEL_BLOBS["CENAF 4"])
-
-
-def asegurar_excel_local(blob_name: str) -> str:
+def resolve_excel_path(base_without_ext: str) -> str:
     """
-    Descarga el Excel desde GCS si existe; si no, crea un libro nuevo y lo sube.
-    Devuelve la ruta local temporal al archivo.
+    Devuelve el archivo existente entre: .xlsm, .xlsx, .xls (en ese orden).
+    Si no existe ninguno, devuelve base + '.xlsm'.
     """
-    suffix = os.path.splitext(blob_name)[1] or ".xlsm"
-    local_path = download_blob_to_tempfile(blob_name, bucket_name=GCS_BUCKET, suffix=suffix)
-    if local_path:
-        return local_path
+    for ext in (".xlsm", ".xlsx", ".xls"):
+        cand = base_without_ext + ext
+        if os.path.exists(cand):
+            return cand
+    return base_without_ext + ".xlsm"
 
-    fd, path = tempfile.mkstemp(suffix=suffix)
-    os.close(fd)
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Hoja1"
-    wb.save(path)
-    upload_file_to_blob(blob_name, path, bucket_name=GCS_BUCKET)
-    return path
-
+def asegurar_excel(path: str):
+    """
+    Crea el archivo si no existe (xlsx o xlsm según la extensión).
+    No crea macros; si el archivo ya tiene macros, se conservarán con keep_vba=True al cargar/guardar.
+    """
+    carpeta = os.path.dirname(path)
+    if carpeta and not os.path.exists(carpeta):
+        os.makedirs(carpeta, exist_ok=True)
+    if not os.path.exists(path):
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Hoja1"
+        wb.save(path)
 
 def cargar_libro(path: str):
+    """
+    Carga el libro respetando macros si es .xlsm.
+    """
+    asegurar_excel(path)
     return load_workbook(path, keep_vba=is_xlsm(path))
-
-
-def sync_excel(blob_name: str, local_path: str):
-    upload_file_to_blob(blob_name, local_path, bucket_name=GCS_BUCKET)
 
 def obtener_siguiente_fila_por_fecha(path: str, col_fecha: str = "C") -> int:
     """
@@ -91,7 +87,7 @@ def fecha_a_texto_curvo(fecha: datetime.date) -> str:
         return None
     return fecha.strftime("%d/%m/%y")
 
-def escribir_registro(path: str, blob_name: str, fila: int, hecho, delito,
+def escribir_registro(path: str, fila: int, hecho, delito,
                       actuacion, fecha_denuncia_txt, fecha_hecho_txt,
                       hora_hecho_txt, hora_fin_txt, preventivo_txt,
                       denunciante_txt, motivo_txt):
@@ -112,7 +108,6 @@ def escribir_registro(path: str, blob_name: str, fila: int, hecho, delito,
         ws[f"X{fila}"].value  = unwrap_quotes(delito)
         ws[f"R{fila}"].value  = unwrap_quotes(actuacion)
         wb.save(path)
-        sync_excel(blob_name, path)
         return True
     except PermissionError:
         st.error("⚠️ No se pudo guardar porque el archivo está abierto en Excel con bloqueo de escritura. Cerrá el archivo y probá de nuevo.")
@@ -127,8 +122,23 @@ def mostrar_hecho():
         st.write(st.session_state.hecho)
 
 def excel_path_por_comisaria(nombre_comisaria: str) -> str:
-    blob_name = excel_blob_por_comisaria(nombre_comisaria)
-    return asegurar_excel_local(blob_name)
+    """
+    Devuelve el path del Excel (con extensión) según la comisaría seleccionada,
+    resolviendo la extensión existente o creando .xlsm si no hay.
+    """
+    if nombre_comisaria == "Comisaria 14":
+        base = excel_base_comisaria_14
+    elif nombre_comisaria == "Comisaria 15":
+        base = excel_base_comisaria_15
+    elif nombre_comisaria == "Comisaria 6":
+        base = excel_base_comisaria_6
+    elif nombre_comisaria == "Comisaria 42":
+        base = excel_base_comisaria_42
+    elif nombre_comisaria == "Comisaria 9":
+        base = excel_base_comisaria_9
+    else:  # "CENAF 4"
+        base = excel_base_cenaf_4
+    return resolve_excel_path(base)
 
 # ---------------------------
 # Estado de sesión
@@ -146,7 +156,6 @@ def _init_state():
     d.setdefault("hecho", None)
     d.setdefault("actuacion", None)
     d.setdefault("excel_path", None)
-    d.setdefault("excel_blob", None)
     d.setdefault("fila", None)
     d.setdefault("fecha_denuncia", None)
     d.setdefault("fecha_hecho", None)
@@ -209,8 +218,8 @@ if st.session_state.step == 1:
         index=index_default if opciones_comisaria else 0,
     )
 
-    excel_blob = excel_blob_por_comisaria(comisaria)
-    excel_path_preview = asegurar_excel_local(excel_blob)
+    excel_path_preview = excel_path_por_comisaria(comisaria)
+    asegurar_excel(excel_path_preview)
     fila_objetivo = obtener_siguiente_fila_por_fecha(excel_path_preview, col_fecha="C")
     planilla_llena = fila_objetivo >= 103
 
@@ -222,7 +231,7 @@ if st.session_state.step == 1:
 
     with col_dl:
         # Detectar MIME según extensión
-        _ext = os.path.splitext(excel_blob)[1].lower()
+        _ext = os.path.splitext(excel_path_preview)[1].lower()
         if _ext == ".xlsm":
             mime = "application/vnd.ms-excel.sheet.macroEnabled.12"
         elif _ext == ".xlsx":
@@ -236,7 +245,7 @@ if st.session_state.step == 1:
             st.download_button(
                 label="📥 Descargar Excel",
                 data=excel_bytes,
-                file_name=os.path.basename(excel_blob),
+                file_name=os.path.basename(excel_path_preview),
                 mime=mime,
                 use_container_width=True,
             )
@@ -246,7 +255,7 @@ if st.session_state.step == 1:
         if usuario_es_admin:
             # Uploader: exige que el nombre del archivo subido sea EXACTAMENTE el esperado
             st.markdown("— o —")
-            expected_name = os.path.basename(excel_blob)
+            expected_name = os.path.basename(excel_path_preview)
             uploaded = st.file_uploader(
                 f"Subir/Reemplazar Excel (nombre requerido: **{expected_name}**)",
                 type=["xlsm", "xlsx", "xls"],
@@ -258,14 +267,8 @@ if st.session_state.step == 1:
                 else:
                     # Guardar lo subido SOBRE el archivo target
                     try:
-                        upload_bytes_to_blob(
-                            excel_blob,
-                            uploaded.getbuffer(),
-                            bucket_name=GCS_BUCKET,
-                            content_type=mime,
-                        )
-                        excel_path_preview = asegurar_excel_local(excel_blob)
-                        fila_objetivo = obtener_siguiente_fila_por_fecha(excel_path_preview, col_fecha="C")
+                        with open(excel_path_preview, "wb") as f:
+                            f.write(uploaded.getbuffer())
                         st.success(f"Se reemplazó el Excel de {comisaria}: {expected_name}")
                     except Exception as e:
                         st.error(f"No se pudo guardar el archivo: {e}")
@@ -279,7 +282,6 @@ if st.session_state.step == 1:
                 st.error("PLANILLA COMPLETA POR FAVOR RENUEVE.")
             else:
                 st.session_state.comisaria = comisaria
-                st.session_state.excel_blob = excel_blob
                 st.session_state.excel_path = excel_path_preview
                 st.session_state.fila = fila_objetivo
                 st.session_state.agenda_fecha = None
@@ -732,7 +734,6 @@ elif st.session_state.step == 6:
                         ws_dir[C("N")].value = unwrap_quotes(link)
 
                     wb_dir.save(st.session_state.excel_path)
-                    sync_excel(st.session_state.excel_blob, st.session_state.excel_path)
 
                 except PermissionError:
                     st.error("⚠️ No se pudo guardar Direcciones: el archivo está abierto en Excel.")
@@ -828,7 +829,6 @@ elif st.session_state.step == 6:
                     if es not in (None, ""): ws_rh[C("BK")].value = unwrap_quotes(str(es).strip())
 
                     wb_rh.save(st.session_state.excel_path)
-                    sync_excel(st.session_state.excel_blob, st.session_state.excel_path)
 
                 except PermissionError:
                     st.error("⚠️ No se pudo guardar Robos/Hurtos: el archivo está abierto en Excel.")
@@ -878,7 +878,6 @@ elif st.session_state.step == 6:
                         ws_o[C("BA")].value = unwrap_quotes(str(oprev.get("aparecio")).strip())
 
                     wb_o.save(st.session_state.excel_path)
-                    sync_excel(st.session_state.excel_blob, st.session_state.excel_path)
 
                 except PermissionError:
                     st.error("⚠️ No se pudo guardar Otros: el archivo está abierto en Excel.")
@@ -889,7 +888,6 @@ elif st.session_state.step == 6:
 
             ok = escribir_registro(
                 st.session_state.excel_path,
-                st.session_state.excel_blob,
                 fila,
                 st.session_state.hecho,
                 st.session_state.delito,

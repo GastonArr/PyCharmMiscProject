@@ -1,18 +1,21 @@
 import datetime
 import html
 import json
+import os
 from typing import Dict, List, Optional, Tuple
 
 import streamlit as st
 
-from cloud_storage import read_text_blob, write_json_blob
 from login import COMISARIA_OPTIONS
 
 # ===========================
 # Configuración básica
 # ===========================
 
-AGENDA_BLOB_PATH = "agenda/agenda_delitos.json"
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "datos")
+os.makedirs(DATA_DIR, exist_ok=True)
+AGENDA_PATH = os.path.join(DATA_DIR, "agenda_delitos.json")
 
 # Usuarios administradores explícitos. Se complementa con el chequeo de comisarías completas.
 ADMIN_USERS = {"Gaston"}
@@ -72,20 +75,21 @@ def es_admin(username: Optional[str], allowed_comisarias: Optional[List[str]]) -
 
 
 def _leer_agenda() -> AgendaData:
-    contenido = read_text_blob(AGENDA_BLOB_PATH)
-    if contenido is None:
+    if not os.path.exists(AGENDA_PATH):
         return {}
     try:
-        data = json.loads(contenido)
-        if isinstance(data, dict):
-            return data  # type: ignore[return-value]
+        with open(AGENDA_PATH, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+            if isinstance(data, dict):
+                return data  # type: ignore[return-value]
     except json.JSONDecodeError:
         st.error("El archivo de agenda está dañado. Se comenzará con una agenda vacía.")
     return {}
 
 
 def _guardar_agenda(data: AgendaData) -> None:
-    write_json_blob(AGENDA_BLOB_PATH, data)
+    with open(AGENDA_PATH, "w", encoding="utf-8") as fh:
+        json.dump(data, fh, ensure_ascii=False, indent=2)
 
 
 def _key_fecha(fecha: datetime.date) -> str:
