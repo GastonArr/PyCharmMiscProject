@@ -11,16 +11,38 @@ DEFAULT_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "proyecto-operaciones-storage
 
 
 def _client() -> storage.Client:
+    # 1) Streamlit secrets (desplegado en Streamlit Cloud)
+    try:
+        import streamlit as st
+
+        if "gcs_service_account" in st.secrets:
+            raw_info = st.secrets["gcs_service_account"]
+            info = json.loads(raw_info) if isinstance(raw_info, str) else dict(raw_info)
+            project = info.get("project_id")
+            return storage.Client.from_service_account_info(info, project=project)
+    except ModuleNotFoundError:
+        # streamlit no está instalado en ejecución local
+        pass
+
+    # 2) Credencial JSON en texto plano
+    key_json = os.getenv("GCS_SERVICE_ACCOUNT_JSON")
+    if key_json:
+        info = json.loads(key_json)
+        project = info.get("project_id")
+        return storage.Client.from_service_account_info(info, project=project)
+
     key_b64 = os.getenv("GCS_SERVICE_ACCOUNT_JSON_B64")
     if key_b64:
         info = json.loads(base64.b64decode(key_b64))
-        return storage.Client.from_service_account_info(info)
+        project = info.get("project_id")
+        return storage.Client.from_service_account_info(info, project=project)
 
     key_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
     if key_path and os.path.exists(key_path):
         return storage.Client.from_service_account_file(key_path)
 
-    return storage.Client()
+    project = os.getenv("GCS_PROJECT_ID")
+    return storage.Client(project=project)
 
 
 def _bucket(bucket_name: Optional[str] = None) -> storage.Bucket:
