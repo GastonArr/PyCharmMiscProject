@@ -2,17 +2,17 @@ import streamlit as st
 from openpyxl import load_workbook
 import os
 import datetime
+from pathlib import Path
 import direcciones          # módulo externo para pantalla de direcciones streamlit run app.py
 import Robos_Hurtos         # subflujo para delitos Robos/Hurtos
 import otros                # subflujo para Lesiones / Desaparición
 import agenda_delitos       # gestión de almanaque de delitos asignados
 from login import render_login, render_user_header
 from cloud_storage import (
+    BUCKET_NAME,
     download_blob_to_tempfile,
     upload_file_to_blob,
 )
-
-BUCKET_NAME = "proyecto-operaciones-storage"
 
 EXCEL_BLOBS = {
     "Comisaria 14": "comisaria 14.xlsm",
@@ -29,6 +29,28 @@ EXCEL_BLOBS = {
 
 def is_xlsm(path: str) -> bool:
     return path.lower().endswith(".xlsm")
+
+
+def detectar_content_type_excel(path: str) -> str:
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".xlsm":
+        return "application/vnd.ms-excel.sheet.macroEnabled.12"
+    if ext == ".xlsx":
+        return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    return "application/vnd.ms-excel"
+
+
+def asegurar_excel_local(blob_name: str, suffix: str = ".xlsm") -> str:
+    """
+    Descarga el Excel del bucket a un archivo temporal y devuelve la ruta.
+    """
+
+    path = download_blob_to_tempfile(
+        blob_name=blob_name,
+        bucket_name=BUCKET_NAME,
+        suffix=suffix,
+    )
+    return str(path)
 
 def cargar_libro(path: str):
     """
@@ -106,11 +128,7 @@ def excel_path_por_comisaria(nombre_comisaria: str) -> str:
     key = f"excel_path::{blob_name}"
     path = st.session_state.get(key)
     if not path or not os.path.exists(path):
-        path = download_blob_to_tempfile(
-            blob_name=blob_name,
-            bucket_name=BUCKET_NAME,
-            suffix=".xlsm",
-        )
+        path = asegurar_excel_local(blob_name, suffix=".xlsm")
         st.session_state[key] = path
     st.session_state.excel_blob_name = blob_name
     return path
@@ -209,14 +227,7 @@ if st.session_state.step == 1:
     col_dl, col_next = st.columns([1,1])
 
     with col_dl:
-        # Detectar MIME según extensión
-        _ext = os.path.splitext(excel_path_preview)[1].lower()
-        if _ext == ".xlsm":
-            mime = "application/vnd.ms-excel.sheet.macroEnabled.12"
-        elif _ext == ".xlsx":
-            mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        else:  # .xls u otro
-            mime = "application/vnd.ms-excel"
+        mime = detectar_content_type_excel(excel_path_preview)
 
         try:
             with open(excel_path_preview, "rb") as f:
@@ -248,9 +259,10 @@ if st.session_state.step == 1:
                         with open(excel_path_preview, "wb") as f:
                             f.write(uploaded.getbuffer())
                         upload_file_to_blob(
-                            local_path=excel_path_preview,
+                            local_path=Path(excel_path_preview),
                             blob_name=expected_name,
                             bucket_name=BUCKET_NAME,
+                            content_type=mime,
                         )
                         st.success(f"Se reemplazó el Excel de {comisaria}: {expected_name}")
                     except Exception as e:
@@ -891,9 +903,10 @@ elif st.session_state.step == 6:
                 )
                 try:
                     upload_file_to_blob(
-                        local_path=st.session_state.excel_path,
+                        local_path=Path(st.session_state.excel_path),
                         blob_name=blob_name,
                         bucket_name=BUCKET_NAME,
+                        content_type=detectar_content_type_excel(blob_name),
                     )
                 except Exception as e:
                     st.error(f"No se pudo sincronizar el Excel con el bucket: {e}")
