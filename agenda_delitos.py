@@ -1,21 +1,19 @@
 import datetime
 import html
 import json
-import os
 from typing import Dict, List, Optional, Tuple
 
+import pandas as pd
 import streamlit as st
 
 from login import COMISARIA_OPTIONS
+from cloud_storage import read_excel_from_gcs, write_excel_to_gcs, ensure_excel_blob
 
 # ===========================
 # Configuración básica
 # ===========================
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "datos")
-os.makedirs(DATA_DIR, exist_ok=True)
-AGENDA_PATH = os.path.join(DATA_DIR, "agenda_delitos.json")
+AGENDA_BLOB_NAME = "excel/agenda_delitos.xlsx"
 
 # Usuarios administradores explícitos. Se complementa con el chequeo de comisarías completas.
 ADMIN_USERS = {"Gaston"}
@@ -75,21 +73,69 @@ def es_admin(username: Optional[str], allowed_comisarias: Optional[List[str]]) -
 
 
 def _leer_agenda() -> AgendaData:
-    if not os.path.exists(AGENDA_PATH):
-        return {}
     try:
-        with open(AGENDA_PATH, "r", encoding="utf-8") as fh:
-            data = json.load(fh)
-            if isinstance(data, dict):
-                return data  # type: ignore[return-value]
-    except json.JSONDecodeError:
-        st.error("El archivo de agenda está dañado. Se comenzará con una agenda vacía.")
-    return {}
+        ensure_excel_blob(AGENDA_BLOB_NAME)
+    except Exception:
+        # Si no se puede crear el blob todavía intentamos leerlo de todas formas
+        pass
+
+    try:
+        df = read_excel_from_gcs(AGENDA_BLOB_NAME)
+    except FileNotFoundError:
+        return {}
+    except Exception:
+        st.error("No se pudo leer la agenda desde el bucket. Se usará una agenda vacía.")
+        return {}
+
+    if df is None or df.empty:
+        return {}
+
+    data: AgendaData = {}
+    for _, row in df.iterrows():
+        comisaria = str(row.get("comisaria", "")).strip()
+        if not comisaria:
+            continue
+        fecha_val = row.get("fecha")
+        if isinstance(fecha_val, datetime.datetime):
+            fecha_val = fecha_val.date()
+        if isinstance(fecha_val, datetime.date):
+            fecha_key = _key_fecha(fecha_val)
+        else:
+            try:
+                fecha_key = _key_fecha(datetime.date.fromisoformat(str(fecha_val)))
+            except Exception:
+                continue
+
+        delitos = data.setdefault(comisaria, {}).setdefault(fecha_key, {}).setdefault("delitos", {})
+        delito_nombre = str(row.get("delito", "")).strip()
+        if not delito_nombre:
+            continue
+        delitos[delito_nombre] = {
+            "plan": int(row.get("plan", 0) or 0),
+            "cargados": int(row.get("cargados", 0) or 0),
+        }
+
+    return data
 
 
 def _guardar_agenda(data: AgendaData) -> None:
-    with open(AGENDA_PATH, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, ensure_ascii=False, indent=2)
+    rows = []
+    for comisaria, dias in (data or {}).items():
+        for fecha_key, info in (dias or {}).items():
+            delitos = info.get("delitos", {}) if isinstance(info, dict) else {}
+            for delito, valores in delitos.items():
+                rows.append(
+                    {
+                        "comisaria": comisaria,
+                        "fecha": fecha_key,
+                        "delito": delito,
+                        "plan": int(valores.get("plan", 0) if isinstance(valores, dict) else 0),
+                        "cargados": int(valores.get("cargados", 0) if isinstance(valores, dict) else 0),
+                    }
+                )
+
+    df = pd.DataFrame(rows, columns=["comisaria", "fecha", "delito", "plan", "cargados"])
+    write_excel_to_gcs(df, AGENDA_BLOB_NAME)
 
 
 def _key_fecha(fecha: datetime.date) -> str:
