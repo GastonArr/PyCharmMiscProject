@@ -245,8 +245,6 @@ def quitar_delito(comisaria: str, fecha: datetime.date, delito: str) -> Tuple[bo
     registro = delitos.get(delito)
     if not registro:
         return False, "El delito no está asignado en este día."
-    if int(registro.get("cargados", 0)) > 0:
-        return False, "No se puede quitar un delito que ya tiene cargas registradas."
     delitos.pop(delito, None)
     if not delitos:
         com_data.pop(key, None)
