@@ -42,3 +42,19 @@ Sigue estos pasos partiendo del panel de bienvenida de Google Cloud (como en la 
       - Con la variable o el secreto configurado, ejecuta un comando simple (por ejemplo `gsutil ls gs://tu-bucket`) o un script corto con el SDK para confirmar que puedes listar/leer/escribir en el bucket.
 
 Con esto la API de Google Cloud Storage quedará habilitada y lista para integrarla en tu aplicación.
+
+## Checklist rápido con la consola (como en tus capturas)
+
+- **Credenciales → Cuentas de servicio**: verifica que la cuenta esté **habilitada** y con un rol que permita leer y escribir
+  objetos del bucket (`Storage Object Admin`, o combinación de `Storage Object User` + `Storage Object Creator`). Si falta el rol,
+  edita la cuenta de servicio para agregarlo.
+- **Descargar clave JSON**: desde el menú ⋮ de la cuenta de servicio, entra a **Administrar claves** y asegúrate de que exista una
+  clave activa. Si no la hay, crea una de tipo **JSON** y usa ese contenido para `st.secrets["gcs_service_account"]` o las
+  variables `GCS_SERVICE_ACCOUNT_JSON`/`GCS_SERVICE_ACCOUNT_JSON_B64`.
+- **Almacenamiento → Navegador**: comprueba que el bucket que usa la app (`proyecto-operaciones-storage` por defecto) está
+  listado y accesible con tu cuenta de servicio. Si ves los objetos y fechas de modificación, la cuenta tiene permisos de lectura;
+  para subir archivos, prueba una carga rápida (por ejemplo, un `.txt`) y confirma que aparezca sin errores.
+- **Región y protección**: valida que el bucket esté en la región esperada (p. ej., `us-east1`) y que no tenga bloqueos de
+  borrado que impidan actualizaciones si tu flujo escribe o reemplaza blobs.
+- **Sin claves caducadas**: si la consola muestra mensajes de claves inactivas o próximas a caducar, rota la clave y actualiza el
+  secreto/variable en tu despliegue.
