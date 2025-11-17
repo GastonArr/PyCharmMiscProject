@@ -1,10 +1,11 @@
 import datetime
 import html
+import json
 from typing import Dict, List, Optional, Tuple
 
 import streamlit as st
 
-from gcs_utils import load_json_from_gcs, save_json_to_gcs
+from gcs_utils import blob_exists, load_json_from_gcs, save_json_to_gcs
 from login import COMISARIA_OPTIONS
 
 # ===========================
@@ -72,10 +73,21 @@ def es_admin(username: Optional[str], allowed_comisarias: Optional[List[str]]) -
 
 def _leer_agenda() -> AgendaData:
     data = load_json_from_gcs(AGENDA_PATH)
-    if isinstance(data, dict):
+    if isinstance(data, dict) and data:
         return data  # type: ignore[return-value]
-    st.error("El archivo de agenda está dañado. Se comenzará con una agenda vacía.")
-    return {}
+
+    agenda_vacia: AgendaData = {}
+    if not blob_exists(AGENDA_PATH):
+        st.caption("No se encontró el calendario en la nube. Se creará uno vacío por defecto.")
+        _guardar_agenda(agenda_vacia)
+        return agenda_vacia
+
+    if isinstance(data, dict):
+        return agenda_vacia
+
+    st.error("El archivo de agenda está dañado. Se comenzó con una agenda vacía.")
+    _guardar_agenda(agenda_vacia)
+    return agenda_vacia
 
 
 def _guardar_agenda(data: AgendaData) -> None:
