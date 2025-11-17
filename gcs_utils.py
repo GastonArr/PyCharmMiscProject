@@ -1,48 +1,26 @@
+import io
 import json
-from typing import Any, Dict, Optional
+import mimetypes
+from typing import Any, Optional
 
 import streamlit as st
 from google.cloud import storage
 from google.api_core.exceptions import NotFound
-
-
-@st.cache_resource
-def _get_storage_client() -> storage.Client:
-    """
-    Crea un cliente de GCS usando la info guardada en st.secrets["gcs_service_account"].
-
-    Soporta dos casos:
-    - Secret como string JSON:
-        gcs_service_account = """{...json...}"""
-    - Secret como tabla TOML:
-        [gcs_service_account]
-        type = "service_account"
-        ...
-    """
-    raw_info = st.secrets["gcs_service_account"]
-
-    # ⬇️ ESTA ES LA CLAVE: no siempre hacemos json.loads
-    if isinstance(raw_info, str):
-        # Caso: lo guardaste como string JSON entre comillas
-        try:
-            info = json.loads(raw_info)
-        except Exception as exc:
-            raise RuntimeError(
-                "El secret 'gcs_service_account' no es un JSON válido. "
-                "Revisa que hayas pegado el archivo .json completo entre las comillas."
-            ) from exc
-    else:
-        # Caso: secret tipo tabla TOML, ya es un dict-like
-        info = dict(raw_info)
-
-    return storage.Client.from_service_account_info(info)
-
-import io
-import mimetypes
-
 from openpyxl import Workbook, load_workbook
 
 BUCKET_NAME = "operaciones-storage"
+
+
+@st.cache_resource(show_spinner=False)
+def _get_storage_client() -> storage.Client:
+    raw_info = st.secrets["gcs_service_account"]
+
+    if isinstance(raw_info, str):
+        info = json.loads(raw_info)
+    else:
+        info = dict(raw_info)
+
+    return storage.Client.from_service_account_info(info)
 
 
 def _get_bucket() -> storage.Bucket:
