@@ -236,17 +236,15 @@ def quitar_delito(comisaria: str, fecha: datetime.date, delito: str) -> Tuple[bo
     data = _leer_agenda()
     com_data = data.get(comisaria)
     if not com_data:
-        return False, "No se encontraron asignaciones para la comisaría.", None
+        return False, "No se encontraron asignaciones para la comisaría."
     key = _key_fecha(fecha)
     dia_info = com_data.get(key)
     if not dia_info:
-        return False, "El día seleccionado no tiene delitos asignados.", None
+        return False, "El día seleccionado no tiene delitos asignados."
     delitos = dia_info.get("delitos", {})
     registro = delitos.get(delito)
     if not registro:
-        return False, "El delito no está asignado en este día.", None
-    if int(registro.get("cargados", 0)) > 0:
-        return False, "No se puede quitar un delito que ya tiene cargas registradas.", None
+        return False, "El delito no está asignado en este día."
     delitos.pop(delito, None)
     if not delitos:
         com_data.pop(key, None)
