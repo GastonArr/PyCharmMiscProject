@@ -12,7 +12,8 @@ from cloud_storage import read_text_blob, write_text_blob
 # Configuración básica
 # ===========================
 
-AGENDA_BLOB = "agenda_delitos.json"
+BUCKET_NAME = "proyecto-operaciones-storage"
+AGENDA_BLOB = "agenda.json"
 
 # Usuarios administradores explícitos. Se complementa con el chequeo de comisarías completas.
 ADMIN_USERS = {"Gaston"}
@@ -73,12 +74,16 @@ def es_admin(username: Optional[str], allowed_comisarias: Optional[List[str]]) -
 
 def _leer_agenda() -> AgendaData:
     try:
-        contenido = read_text_blob(AGENDA_BLOB)
+        contenido = read_text_blob(AGENDA_BLOB, BUCKET_NAME)
         data = json.loads(contenido)
         if isinstance(data, dict):
             return data  # type: ignore[return-value]
+    except json.JSONDecodeError:
+        st.error("El archivo de agenda está dañado. Se comenzará con una agenda vacía.")
+    except FileNotFoundError:
+        return {}
     except Exception:
-        st.warning("No se pudo leer la agenda o estaba dañada. Se usará una agenda vacía.")
+        st.error("No se pudo leer la agenda desde el almacenamiento en la nube.")
     return {}
 
 
@@ -86,6 +91,7 @@ def _guardar_agenda(data: AgendaData) -> None:
     write_text_blob(
         AGENDA_BLOB,
         json.dumps(data, ensure_ascii=False, indent=2),
+        BUCKET_NAME,
     )
 
 
