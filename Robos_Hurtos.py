@@ -4,28 +4,18 @@
 # Escribe en la fila activa (param "fila") del Excel abierto en "excel_path".
 
 import streamlit as st
-from openpyxl import load_workbook, Workbook
-import os
+from cloud_storage import ensure_excel_blob, load_workbook_from_gcs, save_workbook_to_gcs
 
 # ==============================
 # Utilidades de Excel
 # ==============================
-def is_xlsm(path: str) -> bool:
-    return path.lower().endswith(".xlsm")
-
 def asegurar_excel(path: str):
-    carpeta = os.path.dirname(path)
-    if carpeta and not os.path.exists(carpeta):
-        os.makedirs(carpeta, exist_ok=True)
-    if not os.path.exists(path):
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Hoja1"
-        wb.save(path)
+    ensure_excel_blob(path)
+
 
 def cargar_libro(path: str):
     asegurar_excel(path)
-    return load_workbook(path, keep_vba=is_xlsm(path))
+    return load_workbook_from_gcs(path)
 
 def unwrap_quotes(v):
     """Quita SOLO comillas envolventes si existen; no toca espacios internos."""

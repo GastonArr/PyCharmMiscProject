@@ -1,66 +1,57 @@
 import streamlit as st
-from openpyxl import load_workbook, Workbook
-import os
 import datetime
+import os
 import direcciones          # módulo externo para pantalla de direcciones streamlit run app.py
 import Robos_Hurtos         # subflujo para delitos Robos/Hurtos
 import otros                # subflujo para Lesiones / Desaparición
 import agenda_delitos       # gestión de almanaque de delitos asignados
 from login import render_login, render_user_header
+from cloud_storage import (
+    ensure_excel_blob,
+    load_workbook_from_gcs,
+    resolve_excel_blob_name,
+    save_workbook_to_gcs,
+    is_xlsm,
+    get_bucket,
+)
 
 # ===========================
-# Config de rutas (en el repo)
+# Config de rutas en el bucket de GCS
 # ===========================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-EXCEL_DIR = os.path.join(BASE_DIR, "excel")  # carpeta local en el repo
-os.makedirs(EXCEL_DIR, exist_ok=True)
+EXCEL_BASE_DIR = "excel"
 
-# Bases SIN extensión (usamos resolve_excel_path para elegir .xlsm/.xlsx/.xls)
-excel_base_comisaria_14 = os.path.join(EXCEL_DIR, "comisaria 14")
-excel_base_comisaria_15 = os.path.join(EXCEL_DIR, "comisaria 15")
-excel_base_comisaria_6  = os.path.join(EXCEL_DIR, "comisaria 6")
-excel_base_comisaria_42 = os.path.join(EXCEL_DIR, "comisaria 42")
-excel_base_comisaria_9  = os.path.join(EXCEL_DIR, "comisaria 9")
-excel_base_cenaf_4      = os.path.join(EXCEL_DIR, "CENAF 4")
+# Bases SIN extensión (usamos resolve_excel_blob_name para elegir .xlsm/.xlsx/.xls)
+excel_base_comisaria_14 = f"{EXCEL_BASE_DIR}/comisaria 14"
+excel_base_comisaria_15 = f"{EXCEL_BASE_DIR}/comisaria 15"
+excel_base_comisaria_6  = f"{EXCEL_BASE_DIR}/comisaria 6"
+excel_base_comisaria_42 = f"{EXCEL_BASE_DIR}/comisaria 42"
+excel_base_comisaria_9  = f"{EXCEL_BASE_DIR}/comisaria 9"
+excel_base_cenaf_4      = f"{EXCEL_BASE_DIR}/CENAF 4"
 
 # ---------------------------
 # Utilidades
 # ---------------------------
 
-def is_xlsm(path: str) -> bool:
-    return path.lower().endswith(".xlsm")
-
 def resolve_excel_path(base_without_ext: str) -> str:
     """
-    Devuelve el archivo existente entre: .xlsm, .xlsx, .xls (en ese orden).
+    Devuelve el blob existente entre: .xlsm, .xlsx, .xls (en ese orden).
     Si no existe ninguno, devuelve base + '.xlsm'.
     """
-    for ext in (".xlsm", ".xlsx", ".xls"):
-        cand = base_without_ext + ext
-        if os.path.exists(cand):
-            return cand
-    return base_without_ext + ".xlsm"
+    return resolve_excel_blob_name(base_without_ext)
 
 def asegurar_excel(path: str):
     """
-    Crea el archivo si no existe (xlsx o xlsm según la extensión).
+    Crea el blob si no existe (xlsx o xlsm según la extensión).
     No crea macros; si el archivo ya tiene macros, se conservarán con keep_vba=True al cargar/guardar.
     """
-    carpeta = os.path.dirname(path)
-    if carpeta and not os.path.exists(carpeta):
-        os.makedirs(carpeta, exist_ok=True)
-    if not os.path.exists(path):
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Hoja1"
-        wb.save(path)
+    ensure_excel_blob(path)
 
 def cargar_libro(path: str):
     """
     Carga el libro respetando macros si es .xlsm.
     """
     asegurar_excel(path)
-    return load_workbook(path, keep_vba=is_xlsm(path))
+    return load_workbook_from_gcs(path)
 
 def obtener_siguiente_fila_por_fecha(path: str, col_fecha: str = "C") -> int:
     """
@@ -107,7 +98,7 @@ def escribir_registro(path: str, fila: int, hecho, delito,
         ws[f"BL{fila}"].value = unwrap_quotes(hecho)
         ws[f"X{fila}"].value  = unwrap_quotes(delito)
         ws[f"R{fila}"].value  = unwrap_quotes(actuacion)
-        wb.save(path)
+        save_workbook_to_gcs(wb, path)
         return True
     except PermissionError:
         st.error("⚠️ No se pudo guardar porque el archivo está abierto en Excel con bloqueo de escritura. Cerrá el archivo y probá de nuevo.")
@@ -240,8 +231,8 @@ if st.session_state.step == 1:
             mime = "application/vnd.ms-excel"
 
         try:
-            with open(excel_path_preview, "rb") as f:
-                excel_bytes = f.read()
+            blob = get_bucket().blob(excel_path_preview)
+            excel_bytes = blob.download_as_bytes()
             st.download_button(
                 label="📥 Descargar Excel",
                 data=excel_bytes,
@@ -267,8 +258,15 @@ if st.session_state.step == 1:
                 else:
                     # Guardar lo subido SOBRE el archivo target
                     try:
-                        with open(excel_path_preview, "wb") as f:
-                            f.write(uploaded.getbuffer())
+                        blob = get_bucket().blob(excel_path_preview)
+                        blob.upload_from_file(
+                            uploaded,
+                            content_type=(
+                                "application/vnd.ms-excel.sheet.macroEnabled.12"
+                                if expected_name.lower().endswith(".xlsm")
+                                else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                            ),
+                        )
                         st.success(f"Se reemplazó el Excel de {comisaria}: {expected_name}")
                     except Exception as e:
                         st.error(f"No se pudo guardar el archivo: {e}")
@@ -733,7 +731,7 @@ elif st.session_state.step == 6:
                     if link:
                         ws_dir[C("N")].value = unwrap_quotes(link)
 
-                    wb_dir.save(st.session_state.excel_path)
+                    save_workbook_to_gcs(wb_dir, st.session_state.excel_path)
 
                 except PermissionError:
                     st.error("⚠️ No se pudo guardar Direcciones: el archivo está abierto en Excel.")
@@ -828,7 +826,7 @@ elif st.session_state.step == 6:
                     es = rh_preview.get("especialidad")
                     if es not in (None, ""): ws_rh[C("BK")].value = unwrap_quotes(str(es).strip())
 
-                    wb_rh.save(st.session_state.excel_path)
+                    save_workbook_to_gcs(wb_rh, st.session_state.excel_path)
 
                 except PermissionError:
                     st.error("⚠️ No se pudo guardar Robos/Hurtos: el archivo está abierto en Excel.")
@@ -877,7 +875,7 @@ elif st.session_state.step == 6:
                     if oprev.get("aparecio") is not None:
                         ws_o[C("BA")].value = unwrap_quotes(str(oprev.get("aparecio")).strip())
 
-                    wb_o.save(st.session_state.excel_path)
+                    save_workbook_to_gcs(wb_o, st.session_state.excel_path)
 
                 except PermissionError:
                     st.error("⚠️ No se pudo guardar Otros: el archivo está abierto en Excel.")
