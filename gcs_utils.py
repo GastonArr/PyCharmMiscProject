@@ -12,7 +12,14 @@ BUCKET_NAME = "operaciones-storage"
 
 @st.cache_resource(show_spinner=False)
 def _get_storage_client() -> storage.Client:
-    return storage.Client.from_service_account_info(st.secrets["gcs_service_account"])
+    raw_info = st.secrets["gcs_service_account"]
+
+    if isinstance(raw_info, str):
+        info = json.loads(raw_info)
+    else:
+        info = dict(raw_info)
+
+    return storage.Client.from_service_account_info(info)
 
 
 def _get_bucket() -> storage.Bucket:
