@@ -1,5 +1,5 @@
 import streamlit as st
-from openpyxl import load_workbook, Workbook
+from openpyxl import load_workbook
 import os
 import datetime
 import direcciones          # módulo externo para pantalla de direcciones streamlit run app.py
@@ -7,21 +7,21 @@ import Robos_Hurtos         # subflujo para delitos Robos/Hurtos
 import otros                # subflujo para Lesiones / Desaparición
 import agenda_delitos       # gestión de almanaque de delitos asignados
 from login import render_login, render_user_header
+from cloud_storage import (
+    download_blob_to_tempfile,
+    upload_file_to_blob,
+)
 
-# ===========================
-# Config de rutas (en el repo)
-# ===========================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-EXCEL_DIR = os.path.join(BASE_DIR, "excel")  # carpeta local en el repo
-os.makedirs(EXCEL_DIR, exist_ok=True)
+BUCKET_NAME = "proyecto-operaciones-storage"
 
-# Bases SIN extensión (usamos resolve_excel_path para elegir .xlsm/.xlsx/.xls)
-excel_base_comisaria_14 = os.path.join(EXCEL_DIR, "comisaria 14")
-excel_base_comisaria_15 = os.path.join(EXCEL_DIR, "comisaria 15")
-excel_base_comisaria_6  = os.path.join(EXCEL_DIR, "comisaria 6")
-excel_base_comisaria_42 = os.path.join(EXCEL_DIR, "comisaria 42")
-excel_base_comisaria_9  = os.path.join(EXCEL_DIR, "comisaria 9")
-excel_base_cenaf_4      = os.path.join(EXCEL_DIR, "CENAF 4")
+EXCEL_BLOBS = {
+    "Comisaria 14": "comisaria 14.xlsm",
+    "Comisaria 15": "comisaria 15.xlsm",
+    "Comisaria 6": "comisaria 6.xlsm",
+    "Comisaria 42": "comisaria 42.xlsm",
+    "Comisaria 9": "comisaria 9.xlsm",
+    "CENAF 4": "CENAF 4.xlsm",
+}
 
 # ---------------------------
 # Utilidades
@@ -30,36 +30,10 @@ excel_base_cenaf_4      = os.path.join(EXCEL_DIR, "CENAF 4")
 def is_xlsm(path: str) -> bool:
     return path.lower().endswith(".xlsm")
 
-def resolve_excel_path(base_without_ext: str) -> str:
-    """
-    Devuelve el archivo existente entre: .xlsm, .xlsx, .xls (en ese orden).
-    Si no existe ninguno, devuelve base + '.xlsm'.
-    """
-    for ext in (".xlsm", ".xlsx", ".xls"):
-        cand = base_without_ext + ext
-        if os.path.exists(cand):
-            return cand
-    return base_without_ext + ".xlsm"
-
-def asegurar_excel(path: str):
-    """
-    Crea el archivo si no existe (xlsx o xlsm según la extensión).
-    No crea macros; si el archivo ya tiene macros, se conservarán con keep_vba=True al cargar/guardar.
-    """
-    carpeta = os.path.dirname(path)
-    if carpeta and not os.path.exists(carpeta):
-        os.makedirs(carpeta, exist_ok=True)
-    if not os.path.exists(path):
-        wb = Workbook()
-        ws = wb.active
-        ws.title = "Hoja1"
-        wb.save(path)
-
 def cargar_libro(path: str):
     """
     Carga el libro respetando macros si es .xlsm.
     """
-    asegurar_excel(path)
     return load_workbook(path, keep_vba=is_xlsm(path))
 
 def obtener_siguiente_fila_por_fecha(path: str, col_fecha: str = "C") -> int:
@@ -121,24 +95,25 @@ def mostrar_hecho():
         st.subheader("Hecho ingresado para referencia:")
         st.write(st.session_state.hecho)
 
+def excel_blob_por_comisaria(nombre_comisaria: str) -> str:
+    if nombre_comisaria not in EXCEL_BLOBS:
+        raise ValueError(f"Comisaría desconocida: {nombre_comisaria}")
+    return EXCEL_BLOBS[nombre_comisaria]
+
+
 def excel_path_por_comisaria(nombre_comisaria: str) -> str:
-    """
-    Devuelve el path del Excel (con extensión) según la comisaría seleccionada,
-    resolviendo la extensión existente o creando .xlsm si no hay.
-    """
-    if nombre_comisaria == "Comisaria 14":
-        base = excel_base_comisaria_14
-    elif nombre_comisaria == "Comisaria 15":
-        base = excel_base_comisaria_15
-    elif nombre_comisaria == "Comisaria 6":
-        base = excel_base_comisaria_6
-    elif nombre_comisaria == "Comisaria 42":
-        base = excel_base_comisaria_42
-    elif nombre_comisaria == "Comisaria 9":
-        base = excel_base_comisaria_9
-    else:  # "CENAF 4"
-        base = excel_base_cenaf_4
-    return resolve_excel_path(base)
+    blob_name = excel_blob_por_comisaria(nombre_comisaria)
+    key = f"excel_path::{blob_name}"
+    path = st.session_state.get(key)
+    if not path or not os.path.exists(path):
+        path = download_blob_to_tempfile(
+            blob_name=blob_name,
+            bucket_name=BUCKET_NAME,
+            suffix=".xlsm",
+        )
+        st.session_state[key] = path
+    st.session_state.excel_blob_name = blob_name
+    return path
 
 # ---------------------------
 # Estado de sesión
@@ -218,8 +193,12 @@ if st.session_state.step == 1:
         index=index_default if opciones_comisaria else 0,
     )
 
-    excel_path_preview = excel_path_por_comisaria(comisaria)
-    asegurar_excel(excel_path_preview)
+    try:
+        excel_path_preview = excel_path_por_comisaria(comisaria)
+    except Exception as e:
+        st.error(f"No se pudo obtener el Excel desde la nube: {e}")
+        st.stop()
+
     fila_objetivo = obtener_siguiente_fila_por_fecha(excel_path_preview, col_fecha="C")
     planilla_llena = fila_objetivo >= 103
 
@@ -265,13 +244,17 @@ if st.session_state.step == 1:
                 if uploaded.name != expected_name:
                     st.error(f"El archivo debe llamarse **{expected_name}**. Renombralo y volvé a subirlo para evitar conflictos.")
                 else:
-                    # Guardar lo subido SOBRE el archivo target
                     try:
                         with open(excel_path_preview, "wb") as f:
                             f.write(uploaded.getbuffer())
+                        upload_file_to_blob(
+                            local_path=excel_path_preview,
+                            blob_name=expected_name,
+                            bucket_name=BUCKET_NAME,
+                        )
                         st.success(f"Se reemplazó el Excel de {comisaria}: {expected_name}")
                     except Exception as e:
-                        st.error(f"No se pudo guardar el archivo: {e}")
+                        st.error(f"No se pudo guardar el archivo en la nube: {e}")
 
     with col_next:
         if st.button("Siguiente", use_container_width=True):
@@ -283,6 +266,7 @@ if st.session_state.step == 1:
             else:
                 st.session_state.comisaria = comisaria
                 st.session_state.excel_path = excel_path_preview
+                st.session_state.excel_blob_name = excel_blob_por_comisaria(comisaria)
                 st.session_state.fila = fila_objetivo
                 st.session_state.agenda_fecha = None
 
@@ -902,6 +886,19 @@ elif st.session_state.step == 6:
             )
 
             if ok:
+                blob_name = st.session_state.get("excel_blob_name") or excel_blob_por_comisaria(
+                    st.session_state.comisaria
+                )
+                try:
+                    upload_file_to_blob(
+                        local_path=st.session_state.excel_path,
+                        blob_name=blob_name,
+                        bucket_name=BUCKET_NAME,
+                    )
+                except Exception as e:
+                    st.error(f"No se pudo sincronizar el Excel con el bucket: {e}")
+                    st.stop()
+
                 agenda_fecha = st.session_state.get("agenda_fecha")
                 if isinstance(agenda_fecha, datetime.date):
                     registrado, msg_agenda, restantes = agenda_delitos.registrar_carga_delito(
