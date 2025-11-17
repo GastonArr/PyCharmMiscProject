@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 import streamlit as st
 from google.cloud import storage
+from google.api_core.exceptions import NotFound
 from openpyxl import Workbook, load_workbook
 
 BUCKET_NAME = "operaciones-storage"
@@ -106,10 +107,14 @@ def save_workbook_to_gcs(wb, blob_name: str) -> None:
 # =========================
 
 def load_json_from_gcs(blob_name: str) -> dict[str, Any]:
-    data = download_blob_bytes(blob_name)
-    if data is None:
-        upload_blob_bytes(blob_name, json.dumps({}, ensure_ascii=False).encode("utf-8"), content_type="application/json")
+    try:
+        data = download_blob_bytes(blob_name)
+    except NotFound:
         return {}
+
+    if not data:
+        return {}
+
     try:
         return json.loads(data.decode("utf-8"))
     except json.JSONDecodeError:
