@@ -10,14 +10,24 @@ from google.cloud import storage
 DEFAULT_BUCKET_NAME = os.getenv("GCS_BUCKET_NAME", "proyecto-operaciones-storage")
 
 
+def _load_service_account(raw_info, *, source: str) -> dict:
+    """Parsea un diccionario de credenciales con errores claros."""
+
+    try:
+        return json.loads(raw_info) if isinstance(raw_info, str) else dict(raw_info)
+    except (TypeError, json.JSONDecodeError, ValueError) as exc:
+        raise RuntimeError(
+            f"No se pudieron leer las credenciales de GCS desde {source}: formato JSON inválido"
+        ) from exc
+
+
 def _client() -> storage.Client:
     # 1) Streamlit secrets (desplegado en Streamlit Cloud)
     try:
         import streamlit as st
 
         if "gcs_service_account" in st.secrets:
-            raw_info = st.secrets["gcs_service_account"]
-            info = json.loads(raw_info) if isinstance(raw_info, str) else dict(raw_info)
+            info = _load_service_account(st.secrets["gcs_service_account"], source="st.secrets")
             project = info.get("project_id")
             return storage.Client.from_service_account_info(info, project=project)
     except ModuleNotFoundError:
@@ -27,13 +37,21 @@ def _client() -> storage.Client:
     # 2) Credencial JSON en texto plano
     key_json = os.getenv("GCS_SERVICE_ACCOUNT_JSON")
     if key_json:
-        info = json.loads(key_json)
+        info = _load_service_account(key_json, source="GCS_SERVICE_ACCOUNT_JSON")
         project = info.get("project_id")
         return storage.Client.from_service_account_info(info, project=project)
 
     key_b64 = os.getenv("GCS_SERVICE_ACCOUNT_JSON_B64")
     if key_b64:
-        info = json.loads(base64.b64decode(key_b64))
+        try:
+            decoded = base64.b64decode(key_b64)
+        except (base64.binascii.Error, ValueError) as exc:
+            raise RuntimeError(
+                "No se pudieron decodificar las credenciales de GCS desde GCS_SERVICE_ACCOUNT_JSON_B64:"
+                " cadena base64 inválida"
+            ) from exc
+
+        info = _load_service_account(decoded, source="GCS_SERVICE_ACCOUNT_JSON_B64")
         project = info.get("project_id")
         return storage.Client.from_service_account_info(info, project=project)
 
