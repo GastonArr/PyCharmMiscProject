@@ -25,7 +25,7 @@ USERS = {
         "password": "comisaria6@",
         "comisarias": ["Comisaria 6"],
     },
-    "comiaria15": {
+    "comisaria15": {
         "password": "comisaria15@",
         "comisarias": ["Comisaria 15"],
     },
