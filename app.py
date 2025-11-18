@@ -460,18 +460,26 @@ elif st.session_state.step == 4:
 
     st.subheader("Ingrese el día y hora")
 
+    agenda_fecha = st.session_state.get("agenda_fecha")
+    fecha_default = st.session_state.fecha_denuncia
+    if not fecha_default:
+        fecha_default = agenda_fecha if isinstance(agenda_fecha, datetime.date) else None
+
     st.markdown("**Fecha de denuncia/intervención:**")
     fecha_denuncia = st.date_input(
         "Fecha de denuncia/intervención",
-        value=st.session_state.fecha_denuncia or datetime.date.today(),
+        value=fecha_default or datetime.date.today(),
         key="fecha_denuncia_input"
     )
     st.session_state.fecha_denuncia = fecha_denuncia
 
     st.markdown("**Fecha del hecho:**")
+    fecha_hecho_default = st.session_state.fecha_hecho
+    if not fecha_hecho_default:
+        fecha_hecho_default = agenda_fecha if isinstance(agenda_fecha, datetime.date) else None
     fecha_hecho = st.date_input(
         "Fecha del hecho",
-        value=st.session_state.fecha_hecho or datetime.date.today(),
+        value=fecha_hecho_default or datetime.date.today(),
         key="fecha_hecho_input"
     )
     st.session_state.fecha_hecho = fecha_hecho
