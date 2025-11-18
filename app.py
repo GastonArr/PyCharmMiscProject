@@ -245,6 +245,7 @@ if st.session_state.step == 1:
                 )
             except Exception as e:
                 st.caption(f"⚠️ No se pudo preparar la descarga: {e}")
+        st.caption("Usted puede descargar las SNIC que va cargando.")
 
         if usuario_es_admin:
             # Uploader: exige que el nombre del archivo subido sea EXACTAMENTE el esperado
@@ -336,10 +337,10 @@ elif st.session_state.step == 2:
     )
     st.caption("Solo se muestran los delitos asignados por el administrador para el día elegido.")
 
-    denunciante = st.text_input(
-        "Indique el nombre y apellido del denunciante o víctima",
-        value=st.session_state.denunciante or "",
-        max_chars=100
+    preventivo = st.text_input(
+        "Ingrese el número de preventivo (máx 20 caracteres)",
+        value=st.session_state.preventivo or "",
+        max_chars=20
     )
     motivos = [
         "DENUNCIA PARTICULAR",
@@ -362,8 +363,8 @@ elif st.session_state.step == 2:
             st.rerun()
     with col2:
         if st.button("Siguiente"):
-            if not denunciante or denunciante.strip() == "":
-                st.warning("Por favor, ingrese el nombre y apellido del denunciante o víctima.")
+            if not preventivo or preventivo.strip() == "":
+                st.warning("Por favor, ingrese el número de preventivo.")
                 st.stop()
 
             fecha_validacion = st.session_state.get("agenda_fecha")
@@ -395,7 +396,7 @@ elif st.session_state.step == 2:
                 # Direcciones NO se toca
 
             st.session_state.delito = delito
-            st.session_state.denunciante = denunciante
+            st.session_state.preventivo = preventivo
             st.session_state.motivo = motivo_sel
             st.session_state.step = 3
             st.rerun()
@@ -410,10 +411,10 @@ elif st.session_state.step == 3:
         height=150,
         value=st.session_state.hecho or ""
     )
-    preventivo = st.text_input(
-        "Ingrese el número de preventivo (máx 20 caracteres)",
-        value=st.session_state.preventivo or "",
-        max_chars=20
+    denunciante = st.text_input(
+        "Indique el nombre y apellido del denunciante o víctima",
+        value=st.session_state.denunciante or "",
+        max_chars=100
     )
 
     col1, col2 = st.columns(2)
@@ -426,11 +427,11 @@ elif st.session_state.step == 3:
             if not hecho or hecho.strip() == "":
                 st.warning("Por favor, ingrese el hecho antes de continuar.")
                 st.stop()
-            if not preventivo or preventivo.strip() == "":
-                st.warning("Por favor, ingrese el número de preventivo.")
+            if not denunciante or denunciante.strip() == "":
+                st.warning("Por favor, ingrese el nombre y apellido del denunciante o víctima.")
                 st.stop()
             st.session_state.hecho = hecho
-            st.session_state.preventivo = preventivo
+            st.session_state.denunciante = denunciante
             st.session_state.step = 4
             st.rerun()
 
