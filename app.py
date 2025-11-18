@@ -243,6 +243,7 @@ if st.session_state.step == 1:
                     mime=mime,
                     use_container_width=True,
                 )
+                st.caption("Usted puede descargar las SNIC que va cargando.")
             except Exception as e:
                 st.caption(f"⚠️ No se pudo preparar la descarga: {e}")
 
@@ -337,9 +338,9 @@ elif st.session_state.step == 2:
     st.caption("Solo se muestran los delitos asignados por el administrador para el día elegido.")
 
     denunciante = st.text_input(
-        "Indique el nombre y apellido del denunciante o víctima",
+        "Ingrese el número de preventivo (máx 20 caracteres)",
         value=st.session_state.denunciante or "",
-        max_chars=100
+        max_chars=20
     )
     motivos = [
         "DENUNCIA PARTICULAR",
@@ -363,7 +364,7 @@ elif st.session_state.step == 2:
     with col2:
         if st.button("Siguiente"):
             if not denunciante or denunciante.strip() == "":
-                st.warning("Por favor, ingrese el nombre y apellido del denunciante o víctima.")
+                st.warning("Por favor, ingrese el número de preventivo (máx 20 caracteres).")
                 st.stop()
 
             fecha_validacion = st.session_state.get("agenda_fecha")
