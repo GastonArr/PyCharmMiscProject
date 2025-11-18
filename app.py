@@ -108,6 +108,16 @@ def escribir_registro(path: str, fila: int, hecho, delito,
         st.error(f"⚠️ No se pudo escribir en {path}: {e}")
         return False
 
+
+def fila_a_mostrar(fila: int):
+    """
+    Ajusta la fila de escritura para mostrar al usuario restando 2,
+    reflejando el corrimiento por el encabezado de la planilla.
+    """
+    if isinstance(fila, int):
+        return fila - 2
+    return fila
+
 def mostrar_hecho():
     if st.session_state.get("hecho"):
         st.subheader("Hecho ingresado para referencia:")
@@ -298,7 +308,7 @@ if st.session_state.step == 1:
 
 elif st.session_state.step == 2:
     st.subheader(f"Usted seleccionó la {st.session_state.comisaria}")
-    st.caption(f"Próximo registro: fila {st.session_state.fila}")
+    st.caption(f"Próximo registro: fila {fila_a_mostrar(st.session_state.fila)}")
     st.subheader("Seleccione el día y el delito asignado")
 
     comisaria_actual = st.session_state.comisaria
@@ -404,7 +414,7 @@ elif st.session_state.step == 2:
 elif st.session_state.step == 3:
     mostrar_hecho()
     st.subheader(f"Usted seleccionó la {st.session_state.comisaria}")
-    st.caption(f"Próximo registro: fila {st.session_state.fila}")
+    st.caption(f"Próximo registro: fila {fila_a_mostrar(st.session_state.fila)}")
 
     hecho = st.text_area(
         "Indique el hecho (copie tal cual del MEMORANDUM):",
@@ -593,7 +603,7 @@ elif st.session_state.step == 6:
     # Bloque general
     st.markdown("**Datos generales**")
     st.write(f"- Comisaría: {st.session_state.comisaria}")
-    st.write(f"- Fila de escritura: {st.session_state.fila}")
+    st.write(f"- Fila de escritura: {fila_a_mostrar(st.session_state.fila)}")
     st.write(f"- Delito: {st.session_state.delito}")
     st.write(f"- Actuación: {st.session_state.actuacion}")
     st.write(f"- Fecha denuncia/intervención: {st.session_state.fecha_denuncia}")
@@ -919,7 +929,7 @@ elif st.session_state.step == 6:
                     elif restantes == 0:
                         st.caption("✔️ Se completó la carga planificada para este delito en el día seleccionado.")
 
-                st.success(f"Datos guardados en {st.session_state.comisaria} (fila {fila}) ✅")
+                st.success(f"Datos guardados en {st.session_state.comisaria} (fila {fila_a_mostrar(fila)}) ✅")
                 # Reset total
                 st.session_state.step = 1
                 st.session_state.hecho = None
