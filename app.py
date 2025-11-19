@@ -283,7 +283,7 @@ if st.session_state.step == 2:
         st.error("PLANILLA COMPLETA POR FAVOR RENUEVE.")
         st.stop()
 
-    st.subheader(f"Usted seleccionó la {st.session_state.comisaria}")
+    st.subheader(f"Bienvenido(a) a la carga de {st.session_state.comisaria}")
     st.caption(f"Próximo registro: fila {fila_a_mostrar(st.session_state.fila)}")
     st.subheader("Seleccione el día y el delito asignado")
 
@@ -401,7 +401,7 @@ if st.session_state.step == 2:
 
 elif st.session_state.step == 3:
     mostrar_hecho()
-    st.subheader(f"Usted seleccionó la {st.session_state.comisaria}")
+    st.subheader(f"Bienvenido(a) a la carga de {st.session_state.comisaria}")
     st.caption(f"Próximo registro: fila {fila_a_mostrar(st.session_state.fila)}")
 
     hecho = st.text_area(
