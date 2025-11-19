@@ -647,6 +647,9 @@ def render_admin_agenda(username: Optional[str], allowed_comisarias: Optional[Li
                 preventivo_form,
             )
             if ok:
+                # Limpiar el campo para evitar reutilizar accidentalmente
+                # el último número de preventivo ingresado.
+                st.session_state["agenda_admin_preventivo_add"] = ""
                 st.success("Asignación guardada correctamente.")
                 st.rerun()
             else:
