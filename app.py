@@ -292,6 +292,7 @@ if st.session_state.step == 1:
                 st.session_state.excel_path = excel_path_preview
                 st.session_state.fila = fila_objetivo
                 st.session_state.agenda_fecha = None
+                st.session_state.delito_slot_id = None
 
                 # reset subflujos
                 for k in ("rh_cache", "rh_vict_rows", "rh_sex_rows", "rh_step"):
@@ -328,14 +329,16 @@ elif st.session_state.step == 2:
 
     opciones_delito = list(delitos_pendientes.keys())
 
-    def _format_delito(nombre: str) -> str:
-        info_delito = delitos_pendientes.get(nombre, {})
+    def _format_delito(slot_id: str) -> str:
+        info_delito = delitos_pendientes.get(slot_id, {})
         restantes = info_delito.get("restantes", 0)
         planificados = info_delito.get("plan", 0)
-        return f"{nombre.strip()} — restantes {restantes} de {planificados}"
+        etiqueta = info_delito.get("display") or info_delito.get("nombre") or slot_id
+        return f"{etiqueta.strip()} — restantes {restantes} de {planificados}"
 
-    if st.session_state.delito in opciones_delito:
-        index_default = opciones_delito.index(st.session_state.delito)
+    delito_slot_state = st.session_state.get("delito_slot_id")
+    if delito_slot_state in opciones_delito:
+        index_default = opciones_delito.index(delito_slot_state)
     else:
         index_default = 0
 
@@ -348,6 +351,7 @@ elif st.session_state.step == 2:
     st.caption("Solo se muestran los delitos asignados por el administrador para el día elegido.")
 
     info_delito_sel = delitos_pendientes.get(delito, {})
+    delito_nombre = (info_delito_sel.get("nombre") or "").strip() or delito
     preventivo_asignado = (info_delito_sel.get("preventivo") or "").strip()
     preventivo_fijo = bool(preventivo_asignado)
     preventivo_valor = preventivo_asignado or (st.session_state.preventivo or "")
@@ -377,6 +381,7 @@ elif st.session_state.step == 2:
         if st.button("Volver"):
             st.session_state.agenda_fecha = None
             st.session_state.delito = None
+            st.session_state.delito_slot_id = None
             st.session_state.step = 1
             st.rerun()
     with col2:
@@ -399,10 +404,9 @@ elif st.session_state.step == 2:
                 st.warning(msg_delito or "El delito seleccionado no está disponible para su carga.")
                 st.stop()
 
-            # NUEVO: si cambió el delito, limpiar previews/flags/caches de subflujos
-            prev_delito_norm = (st.session_state.delito or "").strip() if st.session_state.get("delito") else None
-            nuevo_delito_norm = (delito or "").strip()
-            if prev_delito_norm and prev_delito_norm != nuevo_delito_norm:
+            # NUEVO: si cambió el delito (slot asignado), limpiar previews/flags/caches de subflujos
+            prev_delito_slot = st.session_state.get("delito_slot_id")
+            if prev_delito_slot and prev_delito_slot != delito:
                 # Robos/Hurtos
                 for k in ("rh_done", "rh_preview", "rh_cache", "rh_vict_rows", "rh_sex_rows", "rh_step"):
                     if k in st.session_state:
@@ -413,7 +417,8 @@ elif st.session_state.step == 2:
                         del st.session_state[k]
                 # Direcciones NO se toca
 
-            st.session_state.delito = delito
+            st.session_state.delito_slot_id = delito
+            st.session_state.delito = delito_nombre
             st.session_state.preventivo = preventivo
             st.session_state.motivo = motivo_sel
             st.session_state.step = 3
@@ -926,11 +931,12 @@ elif st.session_state.step == 6:
 
             if ok:
                 agenda_fecha = st.session_state.get("agenda_fecha")
-                if isinstance(agenda_fecha, datetime.date):
+                delito_slot = st.session_state.get("delito_slot_id")
+                if isinstance(agenda_fecha, datetime.date) and delito_slot:
                     registrado, msg_agenda, restantes = agenda_delitos.registrar_carga_delito(
                         st.session_state.comisaria,
                         agenda_fecha,
-                        st.session_state.delito,
+                        delito_slot,
                     )
                     if not registrado:
                         st.warning(msg_agenda or "No se pudo actualizar el almanaque del día seleccionado.")
@@ -942,6 +948,7 @@ elif st.session_state.step == 6:
                 st.session_state.step = 1
                 st.session_state.hecho = None
                 st.session_state.delito = None
+                st.session_state.delito_slot_id = None
                 st.session_state.agenda_fecha = None
                 st.session_state.actuacion = None
                 st.session_state.fila = None
