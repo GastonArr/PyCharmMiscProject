@@ -438,8 +438,6 @@ def _render_almanaque(dias: List[datetime.date], resumen: Dict[datetime.date, Di
     )
 
     tarjetas: List[str] = []
-    hoy = datetime.date.today()
-    umbral_ocultamiento = datetime.timedelta(days=10)
     for fecha in dias:
         info = resumen.get(fecha, {})
         plan = int(info.get("plan", 0) or 0)
@@ -449,7 +447,9 @@ def _render_almanaque(dias: List[datetime.date], resumen: Dict[datetime.date, Di
         if not estado:
             estado = "completo" if plan > 0 and restantes <= 0 else "pendiente"
 
-        if estado == "completo" and (hoy - fecha) >= umbral_ocultamiento:
+        # Los días que ya fueron completados se ocultan del almanaque de la comisaría
+        # para evitar confusiones con hechos ya cargados.
+        if estado == "completo":
             continue
 
         clases = ["agenda-day", f"estado-{estado}"]
