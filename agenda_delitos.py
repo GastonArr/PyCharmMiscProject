@@ -73,45 +73,6 @@ def _normalize_preventivo(value: Optional[Any]) -> Optional[str]:
     return value or None
 
 
-def _normalize_preventivo_list(values: Optional[Any]) -> List[Optional[str]]:
-    """Devuelve una lista normalizada de preventivos (puede contener None)."""
-
-    if not isinstance(values, list):
-        return []
-    return [_normalize_preventivo(value) for value in values]
-
-
-def _build_preventivos(
-    cantidad: int,
-    preferidos: Optional[Any],
-    fallback_unico: Optional[Any],
-) -> List[Optional[str]]:
-    """Ajusta la lista de preventivos a la cantidad indicada."""
-
-    if cantidad <= 0:
-        return []
-
-    lista = _normalize_preventivo_list(preferidos)
-    if not lista and fallback_unico is not None:
-        unico = _normalize_preventivo(fallback_unico)
-        if unico:
-            lista = [unico] * cantidad
-
-    if len(lista) < cantidad:
-        lista.extend([None] * (cantidad - len(lista)))
-    else:
-        lista = lista[:cantidad]
-
-    return lista
-
-
-def _primer_preventivo_valido(values: List[Optional[str]]) -> Optional[str]:
-    for value in values:
-        if value:
-            return value
-    return None
-
-
 def es_admin(username: Optional[str], allowed_comisarias: Optional[List[str]]) -> bool:
     if not username:
         return False
@@ -198,15 +159,11 @@ def obtener_detalle_dia(comisaria: str, fecha: datetime.date) -> Dict[str, Dict[
     for delito, valores in delitos.items():
         plan = int(valores.get("plan", 0))
         cargados = int(valores.get("cargados", 0))
-        preventivos = _build_preventivos(plan, valores.get("preventivos"), valores.get("preventivo"))
-        preventivo = _primer_preventivo_valido(preventivos)
-        if preventivo is None:
-            preventivo = _normalize_preventivo(valores.get("preventivo"))
+        preventivo = _normalize_preventivo(valores.get("preventivo"))
         resultado[delito] = {
             "plan": max(plan, 0),
             "cargados": max(min(cargados, plan if plan > 0 else cargados), 0),
             "preventivo": preventivo,
-            "preventivos": preventivos,
         }
     return resultado
 
@@ -223,7 +180,6 @@ def obtener_delitos_pendientes(comisaria: str, fecha: datetime.date) -> Dict[str
             "cargados": cargados,
             "restantes": restantes,
             "preventivo": valores.get("preventivo"),
-            "preventivos": valores.get("preventivos", []),
         }
     return pendientes
 
@@ -279,7 +235,6 @@ def asignar_delito(
     delito: str,
     cantidad: int,
     preventivo: Optional[str] = None,
-    preventivos: Optional[List[Optional[str]]] = None,
 ) -> Tuple[bool, Optional[str]]:
     if cantidad <= 0:
         return False, "La cantidad debe ser mayor a cero."
@@ -290,35 +245,13 @@ def asignar_delito(
     if registro and registro.get("cargados", 0) > cantidad:
         return False, "No se puede reducir la cantidad por debajo de lo ya cargado."
     nuevo_registro = dict(registro or {})
-    plan = int(cantidad)
-    nuevo_registro["plan"] = plan
-    cargados_previos = int(registro.get("cargados", 0)) if registro else 0
-    nuevo_registro["cargados"] = min(max(cargados_previos, 0), plan)
+    nuevo_registro["plan"] = int(cantidad)
+    nuevo_registro["cargados"] = int(registro.get("cargados", 0)) if registro else 0
 
-    if preventivos is not None:
-        preventivos_lista = _build_preventivos(plan, list(preventivos), None)
-    elif preventivo is not None:
-        preventivos_lista = _build_preventivos(plan, None, preventivo)
-    else:
-        preventivos_lista = _build_preventivos(
-            plan,
-            registro.get("preventivos") if registro else None,
-            registro.get("preventivo") if registro else None,
-        )
-
-    # Compactar para evitar listas largas llenas de None
-    preventivos_compactos = list(preventivos_lista)
-    while preventivos_compactos and preventivos_compactos[-1] is None:
-        preventivos_compactos.pop()
-
-    if preventivos_compactos:
-        nuevo_registro["preventivos"] = preventivos_compactos
-    else:
-        nuevo_registro.pop("preventivos", None)
-
-    preventivo_final = _primer_preventivo_valido(preventivos_lista)
-    if preventivo_final:
-        nuevo_registro["preventivo"] = preventivo_final
+    preventivo_actual = registro.get("preventivo") if registro else None
+    preventivo_normalizado = _normalize_preventivo(preventivo if preventivo is not None else preventivo_actual)
+    if preventivo_normalizado:
+        nuevo_registro["preventivo"] = preventivo_normalizado
     else:
         nuevo_registro.pop("preventivo", None)
 
@@ -354,17 +287,12 @@ def resumen_dia_dataframe(comisaria: str, fecha: datetime.date) -> None:
         return
     filas = []
     for delito, info in sorted(detalle.items(), key=lambda par: par[0].casefold()):
-        preventivos = info.get("preventivos") or []
-        if preventivos:
-            preventivo_txt = "\n".join((p or "—") for p in preventivos)
-        else:
-            preventivo_txt = info.get("preventivo") or "—"
         filas.append({
             "Delito": delito.strip(),
             "Planificados": info.get("plan", 0),
             "Cargados": info.get("cargados", 0),
             "Restantes": info.get("restantes", 0),
-            "N° Preventivo": preventivo_txt,
+            "N° Preventivo": info.get("preventivo") or "—",
         })
     st.dataframe(filas, use_container_width=True)
 
@@ -644,55 +572,38 @@ def render_admin_agenda(username: Optional[str], allowed_comisarias: Optional[Li
         st.info("No hay delitos asignados en este día.")
     else:
         for idx, (delito, info) in enumerate(sorted(detalle.items(), key=lambda par: par[0].casefold())):
-            planificados = info.get("plan", 0)
-            restantes = max(planificados - info.get("cargados", 0), 0)
-            preventivos_actuales: List[Optional[str]] = info.get("preventivos") or []
-            instancias = planificados if planificados > 0 else len(preventivos_actuales)
-            instancias = max(instancias, 1)
-            cols = st.columns([3, 2.2, 3.1, 0.8])
+            restantes = max(info.get("plan", 0) - info.get("cargados", 0), 0)
+            preventivo_actual = info.get("preventivo") or ""
+            cols = st.columns([3, 1.4, 1.8, 0.9])
             cols[0].markdown(f"**{delito.strip()}**")
-            preventivo_lines = []
-            for idx_prev in range(instancias):
-                valor = preventivos_actuales[idx_prev] if idx_prev < len(preventivos_actuales) else None
-                preventivo_lines.append(f"Preventivo #{idx_prev + 1}: {valor or '—'}")
-            preventivo_txt = "  \\n".join(preventivo_lines)
             cols[1].markdown(
-                f"Planificados: {planificados}  \\n"
+                f"Planificados: {info.get('plan', 0)}  \\n"
                 f"Cargados: {info.get('cargados', 0)}  \\n"
                 f"Restantes: {restantes}  \\n"
-                f"{preventivo_txt}"
+                f"Preventivo: {preventivo_actual or '—'}"
             )
             with cols[2]:
                 nueva_cantidad = st.number_input(
                     "Cantidad",
                     min_value=max(info.get("cargados", 0), 0),
-                    value=planificados,
+                    value=info.get("plan", 0),
                     step=1,
                     key=f"agenda_admin_plan_{idx}"
                 )
-                total_inputs = max(int(nueva_cantidad), 1)
-                preventivo_inputs: List[str] = []
-                for idx_prev in range(total_inputs):
-                    valor = preventivos_actuales[idx_prev] if idx_prev < len(preventivos_actuales) else ""
-                    preventivo_inputs.append(
-                        st.text_input(
-                            f"Preventivo #{idx_prev + 1}",
-                            value=valor,
-                            max_chars=20,
-                            key=f"agenda_admin_prev_{idx}_{idx_prev}"
-                        )
-                    )
-                st.caption(
-                    "Complete un número de preventivo por cada hecho asignado. "
-                    "Deje el campo vacío si la comisaría debe cargarlo."
+                preventivo_input = st.text_input(
+                    "N° Preventivo (opcional)",
+                    value=preventivo_actual,
+                    max_chars=20,
+                    key=f"agenda_admin_prev_{idx}"
                 )
+                st.caption("Deje vacío para que la comisaría lo complete.")
                 if st.button("Guardar cambios", key=f"agenda_admin_update_{idx}"):
                     ok, msg = asignar_delito(
                         comisaria_sel,
                         fecha_sel,
                         delito,
                         int(nueva_cantidad),
-                        preventivos=preventivo_inputs,
+                        preventivo_input,
                     )
                     if ok:
                         st.success(f"Se actualizó {delito.strip()}.")
@@ -725,21 +636,19 @@ def render_admin_agenda(username: Optional[str], allowed_comisarias: Optional[Li
             value=1,
             key="agenda_admin_cantidad_add",
         )
-        preventivo_form = st.text_area(
-            "N° de preventivos (opcional)",
+        preventivo_form = st.text_input(
+            "N° de preventivo (opcional)",
+            max_chars=20,
             key="agenda_admin_preventivo_add",
-            height=90,
-            help="Ingrese un número por línea para separar cada hecho planificado.",
         )
         submitted = st.form_submit_button("Guardar asignación")
         if submitted:
-            preventivos_nuevos = [line.strip() for line in preventivo_form.splitlines()]
             ok, msg = asignar_delito(
                 comisaria_sel,
                 fecha_sel,
                 delito_nuevo,
                 int(cantidad),
-                preventivos=preventivos_nuevos if any(preventivos_nuevos) else None,
+                preventivo_form,
             )
             if ok:
                 # Limpiar el campo en la próxima ejecución para evitar
