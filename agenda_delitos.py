@@ -273,6 +273,10 @@ def obtener_delitos_pendientes(comisaria: str, fecha: datetime.date) -> Dict[str
         plan = valores.get("plan", 1)
         cargados = valores.get("cargados", 0)
         restantes = max(plan - cargados, 0)
+        if restantes <= 0:
+            # Si ya se cargó este delito, no debe mostrarse más
+            continue
+
         pendientes[delito_id] = {
             "plan": plan,
             "cargados": cargados,
@@ -407,7 +411,7 @@ def quitar_delito(comisaria: str, fecha: datetime.date, delito_id: str) -> Tuple
 def resumen_dia_dataframe(comisaria: str, fecha: datetime.date) -> None:
     detalle = obtener_delitos_pendientes(comisaria, fecha)
     if not detalle:
-        st.info("No hay delitos planificados para el día seleccionado.")
+        st.info("No hay delitos pendientes para el día seleccionado.")
         return
     etiquetas = _generar_etiquetas(detalle)
     filas = []
@@ -691,10 +695,10 @@ def render_admin_agenda(username: Optional[str], allowed_comisarias: Optional[Li
     st.markdown(
         f"#### Delitos planificados para {fecha_sel.strftime('%d/%m/%Y')} — {comisaria_sel}"
     )
-    detalle = obtener_detalle_dia(comisaria_sel, fecha_sel)
+    detalle = obtener_delitos_pendientes(comisaria_sel, fecha_sel)
     etiquetas = _generar_etiquetas(detalle)
     if not detalle:
-        st.info("No hay delitos asignados en este día.")
+        st.info("No hay delitos pendientes en este día.")
     else:
         orden = sorted(detalle.items(), key=lambda par: etiquetas.get(par[0], par[0]).casefold())
         for delito_id, info in orden:
