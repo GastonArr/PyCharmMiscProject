@@ -619,6 +619,10 @@ def render_admin_agenda(username: Optional[str], allowed_comisarias: Optional[Li
                     st.error(msg or "No se pudo quitar el delito.")
 
     st.markdown("#### Agregar o actualizar delito")
+
+    if st.session_state.pop("agenda_admin_preventivo_reset", False):
+        st.session_state["agenda_admin_preventivo_add"] = ""
+
     with st.form(key="agenda_admin_add_form"):
         delito_nuevo = st.selectbox(
             "Delito",
@@ -647,9 +651,9 @@ def render_admin_agenda(username: Optional[str], allowed_comisarias: Optional[Li
                 preventivo_form,
             )
             if ok:
-                # Limpiar el campo para evitar reutilizar accidentalmente
-                # el último número de preventivo ingresado.
-                st.session_state["agenda_admin_preventivo_add"] = ""
+                # Limpiar el campo en la próxima ejecución para evitar
+                # reutilizar accidentalmente el último número de preventivo ingresado.
+                st.session_state["agenda_admin_preventivo_reset"] = True
                 st.success("Asignación guardada correctamente.")
                 st.rerun()
             else:
