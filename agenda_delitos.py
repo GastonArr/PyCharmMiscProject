@@ -1,7 +1,7 @@
 import datetime
 import html
 import json
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import streamlit as st
 
@@ -59,7 +59,18 @@ DELITOS_DISPONIBLES: List[str] = sorted([
 # Utilidades internas
 # ===========================
 
-AgendaData = Dict[str, Dict[str, Dict[str, Dict[str, int]]]]
+AgendaData = Dict[str, Dict[str, Dict[str, Dict[str, Any]]]]
+
+
+def _normalize_preventivo(value: Optional[Any]) -> Optional[str]:
+    """Normaliza el texto del preventivo eliminando espacios y vacíos."""
+
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        value = str(value)
+    value = value.strip()
+    return value or None
 
 
 def es_admin(username: Optional[str], allowed_comisarias: Optional[List[str]]) -> bool:
@@ -140,24 +151,26 @@ def obtener_dias_planificados(comisaria: str) -> List[datetime.date]:
     return resultado
 
 
-def obtener_detalle_dia(comisaria: str, fecha: datetime.date) -> Dict[str, Dict[str, int]]:
+def obtener_detalle_dia(comisaria: str, fecha: datetime.date) -> Dict[str, Dict[str, Any]]:
     data = _leer_agenda()
     entry = data.get(comisaria, {}).get(_key_fecha(fecha), {})
     delitos = entry.get("delitos", {})
-    resultado: Dict[str, Dict[str, int]] = {}
+    resultado: Dict[str, Dict[str, Any]] = {}
     for delito, valores in delitos.items():
         plan = int(valores.get("plan", 0))
         cargados = int(valores.get("cargados", 0))
+        preventivo = _normalize_preventivo(valores.get("preventivo"))
         resultado[delito] = {
             "plan": max(plan, 0),
             "cargados": max(min(cargados, plan if plan > 0 else cargados), 0),
+            "preventivo": preventivo,
         }
     return resultado
 
 
-def obtener_delitos_pendientes(comisaria: str, fecha: datetime.date) -> Dict[str, Dict[str, int]]:
+def obtener_delitos_pendientes(comisaria: str, fecha: datetime.date) -> Dict[str, Dict[str, Any]]:
     detalle = obtener_detalle_dia(comisaria, fecha)
-    pendientes: Dict[str, Dict[str, int]] = {}
+    pendientes: Dict[str, Dict[str, Any]] = {}
     for delito, valores in detalle.items():
         plan = valores.get("plan", 0)
         cargados = valores.get("cargados", 0)
@@ -166,6 +179,7 @@ def obtener_delitos_pendientes(comisaria: str, fecha: datetime.date) -> Dict[str
             "plan": plan,
             "cargados": cargados,
             "restantes": restantes,
+            "preventivo": valores.get("preventivo"),
         }
     return pendientes
 
@@ -215,7 +229,13 @@ def registrar_carga_delito(comisaria: str, fecha: datetime.date, delito: str) ->
     return True, None, restantes
 
 
-def asignar_delito(comisaria: str, fecha: datetime.date, delito: str, cantidad: int) -> Tuple[bool, Optional[str]]:
+def asignar_delito(
+    comisaria: str,
+    fecha: datetime.date,
+    delito: str,
+    cantidad: int,
+    preventivo: Optional[str] = None,
+) -> Tuple[bool, Optional[str]]:
     if cantidad <= 0:
         return False, "La cantidad debe ser mayor a cero."
     data = _leer_agenda()
@@ -224,10 +244,18 @@ def asignar_delito(comisaria: str, fecha: datetime.date, delito: str, cantidad: 
     registro = delitos.get(delito)
     if registro and registro.get("cargados", 0) > cantidad:
         return False, "No se puede reducir la cantidad por debajo de lo ya cargado."
-    delitos[delito] = {
-        "plan": int(cantidad),
-        "cargados": int(registro.get("cargados", 0)) if registro else 0,
-    }
+    nuevo_registro = dict(registro or {})
+    nuevo_registro["plan"] = int(cantidad)
+    nuevo_registro["cargados"] = int(registro.get("cargados", 0)) if registro else 0
+
+    preventivo_actual = registro.get("preventivo") if registro else None
+    preventivo_normalizado = _normalize_preventivo(preventivo if preventivo is not None else preventivo_actual)
+    if preventivo_normalizado:
+        nuevo_registro["preventivo"] = preventivo_normalizado
+    else:
+        nuevo_registro.pop("preventivo", None)
+
+    delitos[delito] = nuevo_registro
     _guardar_agenda(data)
     return True, None
 
@@ -264,6 +292,7 @@ def resumen_dia_dataframe(comisaria: str, fecha: datetime.date) -> None:
             "Planificados": info.get("plan", 0),
             "Cargados": info.get("cargados", 0),
             "Restantes": info.get("restantes", 0),
+            "N° Preventivo": info.get("preventivo") or "—",
         })
     st.dataframe(filas, use_container_width=True)
 
@@ -544,27 +573,43 @@ def render_admin_agenda(username: Optional[str], allowed_comisarias: Optional[Li
     else:
         for idx, (delito, info) in enumerate(sorted(detalle.items(), key=lambda par: par[0].casefold())):
             restantes = max(info.get("plan", 0) - info.get("cargados", 0), 0)
-            cols = st.columns([3, 1, 1, 1])
+            preventivo_actual = info.get("preventivo") or ""
+            cols = st.columns([3, 1.4, 1.8, 0.9])
             cols[0].markdown(f"**{delito.strip()}**")
             cols[1].markdown(
                 f"Planificados: {info.get('plan', 0)}  \\n"
                 f"Cargados: {info.get('cargados', 0)}  \\n"
-                f"Restantes: {restantes}"
+                f"Restantes: {restantes}  \\n"
+                f"Preventivo: {preventivo_actual or '—'}"
             )
-            nueva_cantidad = cols[2].number_input(
-                "Cantidad",
-                min_value=max(info.get("cargados", 0), 0),
-                value=info.get("plan", 0),
-                step=1,
-                key=f"agenda_admin_plan_{idx}"
-            )
-            if cols[2].button("Actualizar", key=f"agenda_admin_update_{idx}"):
-                ok, msg = asignar_delito(comisaria_sel, fecha_sel, delito, int(nueva_cantidad))
-                if ok:
-                    st.success(f"Se actualizó la cantidad para {delito.strip()}.")
-                    st.rerun()
-                else:
-                    st.error(msg or "No se pudo actualizar la cantidad.")
+            with cols[2]:
+                nueva_cantidad = st.number_input(
+                    "Cantidad",
+                    min_value=max(info.get("cargados", 0), 0),
+                    value=info.get("plan", 0),
+                    step=1,
+                    key=f"agenda_admin_plan_{idx}"
+                )
+                preventivo_input = st.text_input(
+                    "N° Preventivo (opcional)",
+                    value=preventivo_actual,
+                    max_chars=20,
+                    key=f"agenda_admin_prev_{idx}"
+                )
+                st.caption("Deje vacío para que la comisaría lo complete.")
+                if st.button("Guardar cambios", key=f"agenda_admin_update_{idx}"):
+                    ok, msg = asignar_delito(
+                        comisaria_sel,
+                        fecha_sel,
+                        delito,
+                        int(nueva_cantidad),
+                        preventivo_input,
+                    )
+                    if ok:
+                        st.success(f"Se actualizó {delito.strip()}.")
+                        st.rerun()
+                    else:
+                        st.error(msg or "No se pudo actualizar la asignación.")
             if cols[3].button("Quitar", key=f"agenda_admin_remove_{idx}"):
                 ok, msg = quitar_delito(comisaria_sel, fecha_sel, delito)
                 if ok:
@@ -587,9 +632,20 @@ def render_admin_agenda(username: Optional[str], allowed_comisarias: Optional[Li
             value=1,
             key="agenda_admin_cantidad_add",
         )
+        preventivo_form = st.text_input(
+            "N° de preventivo (opcional)",
+            max_chars=20,
+            key="agenda_admin_preventivo_add",
+        )
         submitted = st.form_submit_button("Guardar asignación")
         if submitted:
-            ok, msg = asignar_delito(comisaria_sel, fecha_sel, delito_nuevo, int(cantidad))
+            ok, msg = asignar_delito(
+                comisaria_sel,
+                fecha_sel,
+                delito_nuevo,
+                int(cantidad),
+                preventivo_form,
+            )
             if ok:
                 st.success("Asignación guardada correctamente.")
                 st.rerun()
@@ -597,7 +653,7 @@ def render_admin_agenda(username: Optional[str], allowed_comisarias: Optional[Li
                 st.error(msg or "No se pudo guardar la asignación.")
 
 
-def render_selector_comisaria(comisaria: str) -> Tuple[Optional[datetime.date], Dict[str, Dict[str, int]], Optional[str]]:
+def render_selector_comisaria(comisaria: str) -> Tuple[Optional[datetime.date], Dict[str, Dict[str, Any]], Optional[str]]:
     dias = obtener_dias_planificados(comisaria)
     if not dias:
         return None, {}, "No hay delitos asignados por el administrador para esta comisaría."

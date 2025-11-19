@@ -347,11 +347,19 @@ elif st.session_state.step == 2:
     )
     st.caption("Solo se muestran los delitos asignados por el administrador para el día elegido.")
 
-    preventivo = st.text_input(
+    info_delito_sel = delitos_pendientes.get(delito, {})
+    preventivo_asignado = (info_delito_sel.get("preventivo") or "").strip()
+    preventivo_fijo = bool(preventivo_asignado)
+    preventivo_valor = preventivo_asignado or (st.session_state.preventivo or "")
+    preventivo_input = st.text_input(
         "Ingrese el número de preventivo (máx 20 caracteres)",
-        value=st.session_state.preventivo or "",
-        max_chars=20
+        value=preventivo_valor,
+        max_chars=20,
+        disabled=preventivo_fijo,
     )
+    if preventivo_fijo:
+        st.caption("Número asignado por el administrador. Solo se muestra para referencia.")
+    preventivo = preventivo_asignado if preventivo_fijo else preventivo_input
     motivos = [
         "DENUNCIA PARTICULAR",
         "INTERVENCIÓN POLICIAL",
@@ -373,7 +381,7 @@ elif st.session_state.step == 2:
             st.rerun()
     with col2:
         if st.button("Siguiente"):
-            if not preventivo or preventivo.strip() == "":
+            if (not preventivo_fijo) and (not preventivo or preventivo.strip() == ""):
                 st.warning("Por favor, ingrese el número de preventivo.")
                 st.stop()
 
