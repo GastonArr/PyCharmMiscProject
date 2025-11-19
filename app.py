@@ -180,134 +180,109 @@ if not st.session_state.authenticated:
     render_login()
     st.stop()
 
-render_user_header()
-
-# Validar que la comisaría seleccionada (si existe) sea permitida
 allowed_comisarias = st.session_state.allowed_comisarias or []
+if not allowed_comisarias:
+    st.error("Su usuario no tiene comisarías asignadas. Contacte al administrador del sistema.")
+    st.stop()
+
+if st.session_state.comisaria not in allowed_comisarias:
+    st.session_state.comisaria = allowed_comisarias[0]
+
+comisaria_actual = st.session_state.comisaria
+excel_path_preview = excel_path_por_comisaria(comisaria_actual)
+asegurar_excel(excel_path_preview)
+fila_objetivo = obtener_siguiente_fila_por_fecha(excel_path_preview, col_fecha="C")
+planilla_llena = fila_objetivo >= 103
+
+st.session_state.excel_path = excel_path_preview
+st.session_state.fila = fila_objetivo
+st.session_state.planilla_llena = planilla_llena
+
 usuario_es_admin = agenda_delitos.es_admin(
     st.session_state.username,
     allowed_comisarias,
 )
 
-# Panel de administración del almanaque (solo usuarios habilitados)
-agenda_delitos.render_admin_agenda(st.session_state.username, allowed_comisarias)
-
-if st.session_state.comisaria and st.session_state.comisaria not in allowed_comisarias:
-    st.session_state.comisaria = None
-    st.session_state.step = 1
+render_user_header()
 
 # ---------------------------
 # UI por pasos
 # ---------------------------
 
 if st.session_state.step == 1:
-    st.title("CARGA DE SNIC")
-    st.subheader("Seleccione la comisaría en la que desea trabajar:")
+    st.session_state.agenda_fecha = None
+    st.session_state.delito_slot_id = None
 
-    opciones_comisaria = allowed_comisarias
-    if not opciones_comisaria:
-        st.error("Su usuario no tiene comisarías asignadas. Contacte al administrador del sistema.")
+    for k in ("rh_cache", "rh_vict_rows", "rh_sex_rows", "rh_step"):
+        st.session_state.pop(k, None)
+
+    st.session_state.rh_done = False
+    st.session_state.rh_preview = None
+    st.session_state.others_done = False
+    st.session_state.others_preview = None
+    st.session_state.direcciones_preview = None
+
+    st.session_state.step = 2
+    st.rerun()
+
+# --- Botón Descargar Excel + Uploader con validación de nombre ---
+st.caption("Usted puede descargar las SNIC que va cargando.")
+col_dl, col_upload = st.columns([1, 1])
+
+with col_dl:
+    _ext = os.path.splitext(excel_path_preview)[1].lower()
+    if _ext == ".xlsm":
+        mime = "application/vnd.ms-excel.sheet.macroEnabled.12"
+    elif _ext == ".xlsx":
+        mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    else:  # .xls u otro
+        mime = "application/vnd.ms-excel"
+
+    excel_bytes = download_blob_bytes(excel_path_preview)
+    if excel_bytes is None:
+        st.caption("⚠️ No se encontró el Excel en el bucket. Se creará automáticamente cuando continúe.")
+    else:
+        try:
+            st.download_button(
+                label="📥 Descargar Excel",
+                data=excel_bytes,
+                file_name=os.path.basename(excel_path_preview),
+                mime=mime,
+                use_container_width=True,
+            )
+        except Exception as e:
+            st.caption(f"⚠️ No se pudo preparar la descarga: {e}")
+
+if usuario_es_admin:
+    with col_upload:
+        st.markdown("— o —")
+        expected_name = os.path.basename(excel_path_preview)
+        uploaded = st.file_uploader(
+            f"Subir/Reemplazar Excel (nombre requerido: **{expected_name}**)",
+            type=["xlsm", "xlsx", "xls"],
+            key="uploader_excel"
+        )
+        if uploaded is not None:
+            if uploaded.name != expected_name:
+                st.error(f"El archivo debe llamarse **{expected_name}**. Renombralo y volvé a subirlo para evitar conflictos.")
+            else:
+                try:
+                    upload_blob_bytes(
+                        excel_path_preview,
+                        uploaded.getbuffer().tobytes(),
+                    )
+                    st.success(f"Se reemplazó el Excel de {comisaria_actual}: {expected_name}")
+                except Exception as e:
+                    st.error(f"No se pudo guardar el archivo en el bucket: {e}")
+
+# Panel de administración del almanaque (solo usuarios habilitados)
+agenda_delitos.render_admin_agenda(st.session_state.username, allowed_comisarias)
+
+if st.session_state.step == 2:
+    if st.session_state.planilla_llena:
+        st.error("PLANILLA COMPLETA POR FAVOR RENUEVE.")
         st.stop()
 
-    if st.session_state.comisaria in opciones_comisaria:
-        index_default = opciones_comisaria.index(st.session_state.comisaria)
-    else:
-        index_default = 0
-
-    comisaria = st.selectbox(
-        "Seleccione la comisaría",
-        opciones_comisaria,
-        index=index_default if opciones_comisaria else 0,
-    )
-
-    excel_path_preview = excel_path_por_comisaria(comisaria)
-    asegurar_excel(excel_path_preview)
-    fila_objetivo = obtener_siguiente_fila_por_fecha(excel_path_preview, col_fecha="C")
-    planilla_llena = fila_objetivo >= 103
-
-    if planilla_llena:
-        st.error("PLANILLA COMPLETA POR FAVOR RENUEVE.")
-
-    # --- Botón Descargar Excel + Uploader con validación de nombre ---
-    col_dl, col_next = st.columns([1,1])
-
-    with col_dl:
-        # Detectar MIME según extensión
-        _ext = os.path.splitext(excel_path_preview)[1].lower()
-        if _ext == ".xlsm":
-            mime = "application/vnd.ms-excel.sheet.macroEnabled.12"
-        elif _ext == ".xlsx":
-            mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        else:  # .xls u otro
-            mime = "application/vnd.ms-excel"
-
-        excel_bytes = download_blob_bytes(excel_path_preview)
-        if excel_bytes is None:
-            st.caption("⚠️ No se encontró el Excel en el bucket. Se creará automáticamente cuando continúe.")
-        else:
-            try:
-                st.download_button(
-                    label="📥 Descargar Excel",
-                    data=excel_bytes,
-                    file_name=os.path.basename(excel_path_preview),
-                    mime=mime,
-                    use_container_width=True,
-                )
-            except Exception as e:
-                st.caption(f"⚠️ No se pudo preparar la descarga: {e}")
-        st.caption("Usted puede descargar las SNIC que va cargando.")
-
-        if usuario_es_admin:
-            # Uploader: exige que el nombre del archivo subido sea EXACTAMENTE el esperado
-            st.markdown("— o —")
-            expected_name = os.path.basename(excel_path_preview)
-            uploaded = st.file_uploader(
-                f"Subir/Reemplazar Excel (nombre requerido: **{expected_name}**)",
-                type=["xlsm", "xlsx", "xls"],
-                key="uploader_excel"
-            )
-            if uploaded is not None:
-                if uploaded.name != expected_name:
-                    st.error(f"El archivo debe llamarse **{expected_name}**. Renombralo y volvé a subirlo para evitar conflictos.")
-                else:
-                    # Guardar lo subido SOBRE el archivo target
-                    try:
-                        upload_blob_bytes(
-                            excel_path_preview,
-                            uploaded.getbuffer().tobytes(),
-                        )
-                        st.success(f"Se reemplazó el Excel de {comisaria}: {expected_name}")
-                    except Exception as e:
-                        st.error(f"No se pudo guardar el archivo en el bucket: {e}")
-
-    with col_next:
-        if st.button("Siguiente", use_container_width=True):
-            if comisaria not in allowed_comisarias:
-                st.error("No tiene permisos para trabajar con la comisaría seleccionada.")
-                st.stop()
-            if planilla_llena:
-                st.error("PLANILLA COMPLETA POR FAVOR RENUEVE.")
-            else:
-                st.session_state.comisaria = comisaria
-                st.session_state.excel_path = excel_path_preview
-                st.session_state.fila = fila_objetivo
-                st.session_state.agenda_fecha = None
-                st.session_state.delito_slot_id = None
-
-                # reset subflujos
-                for k in ("rh_cache", "rh_vict_rows", "rh_sex_rows", "rh_step"):
-                    st.session_state.pop(k, None)
-
-                st.session_state.rh_done = False
-                st.session_state.rh_preview = None
-                st.session_state.others_done = False
-                st.session_state.others_preview = None
-                st.session_state.direcciones_preview = None
-
-                st.session_state.step = 2
-                st.rerun()
-
-elif st.session_state.step == 2:
     st.subheader(f"Usted seleccionó la {st.session_state.comisaria}")
     st.caption(f"Próximo registro: fila {fila_a_mostrar(st.session_state.fila)}")
     st.subheader("Seleccione el día y el delito asignado")
