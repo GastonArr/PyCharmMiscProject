@@ -348,7 +348,15 @@ elif st.session_state.step == 2:
     st.caption("Solo se muestran los delitos asignados por el administrador para el día elegido.")
 
     info_delito_sel = delitos_pendientes.get(delito, {})
-    preventivo_asignado = (info_delito_sel.get("preventivo") or "").strip()
+    preventivos_disponibles = info_delito_sel.get("preventivos") or []
+    indice_preventivo = int(info_delito_sel.get("cargados", 0) or 0)
+    preventivo_asignado = ""
+    if preventivos_disponibles:
+        if 0 <= indice_preventivo < len(preventivos_disponibles):
+            preventivo_asignado = preventivos_disponibles[indice_preventivo] or ""
+        else:
+            preventivo_asignado = preventivos_disponibles[-1] or ""
+    preventivo_asignado = preventivo_asignado.strip()
     preventivo_fijo = bool(preventivo_asignado)
     preventivo_valor = preventivo_asignado or (st.session_state.preventivo or "")
     preventivo_input = st.text_input(
