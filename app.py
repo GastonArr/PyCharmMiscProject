@@ -26,6 +26,16 @@ excel_base_comisaria_42 = "comisaria 42"
 excel_base_comisaria_9  = "comisaria 9"
 excel_base_cenaf_4      = "CENAF 4"
 
+# Mapeo para resolver la base según la comisaría seleccionada.
+_BASE_POR_COMISARIA = {
+    "Comisaria 14": excel_base_comisaria_14,
+    "Comisaria 15": excel_base_comisaria_15,
+    "Comisaria 6": excel_base_comisaria_6,
+    "Comisaria 42": excel_base_comisaria_42,
+    "Comisaria 9": excel_base_comisaria_9,
+    "CENAF 4": excel_base_cenaf_4,
+}
+
 # ---------------------------
 # Utilidades
 # ---------------------------
@@ -128,18 +138,7 @@ def excel_path_por_comisaria(nombre_comisaria: str) -> str:
     Devuelve el path del Excel (con extensión) según la comisaría seleccionada,
     resolviendo la extensión existente o creando .xlsm si no hay.
     """
-    if nombre_comisaria == "Comisaria 14":
-        base = excel_base_comisaria_14
-    elif nombre_comisaria == "Comisaria 15":
-        base = excel_base_comisaria_15
-    elif nombre_comisaria == "Comisaria 6":
-        base = excel_base_comisaria_6
-    elif nombre_comisaria == "Comisaria 42":
-        base = excel_base_comisaria_42
-    elif nombre_comisaria == "Comisaria 9":
-        base = excel_base_comisaria_9
-    else:  # "CENAF 4"
-        base = excel_base_cenaf_4
+    base = _BASE_POR_COMISARIA.get(nombre_comisaria, excel_base_cenaf_4)
     return resolve_excel_path(base)
 
 # ---------------------------
