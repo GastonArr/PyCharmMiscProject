@@ -185,8 +185,25 @@ if not allowed_comisarias:
     st.error("Su usuario no tiene comisarías asignadas. Contacte al administrador del sistema.")
     st.stop()
 
+usuario_es_admin = agenda_delitos.es_admin(
+    st.session_state.username,
+    allowed_comisarias,
+)
+
 if st.session_state.comisaria not in allowed_comisarias:
     st.session_state.comisaria = allowed_comisarias[0]
+
+if usuario_es_admin and len(allowed_comisarias) > 1:
+    seleccion = st.selectbox(
+        "Seleccione la comisaría a cargar",
+        options=allowed_comisarias,
+        index=allowed_comisarias.index(st.session_state.comisaria),
+        help="Afecta al almanaque y a las descargas de Excel.",
+    )
+    if seleccion != st.session_state.comisaria:
+        st.session_state.comisaria = seleccion
+        st.session_state.step = 1
+        st.rerun()
 
 comisaria_actual = st.session_state.comisaria
 excel_path_preview = excel_path_por_comisaria(comisaria_actual)
@@ -197,11 +214,6 @@ planilla_llena = fila_objetivo >= 103
 st.session_state.excel_path = excel_path_preview
 st.session_state.fila = fila_objetivo
 st.session_state.planilla_llena = planilla_llena
-
-usuario_es_admin = agenda_delitos.es_admin(
-    st.session_state.username,
-    allowed_comisarias,
-)
 
 render_user_header()
 
