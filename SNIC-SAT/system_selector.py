@@ -6,8 +6,8 @@ import streamlit as st
 AVAILABLE_SYSTEMS = [
     {
         "id": "snic-sat",
-        "label": "Seleccione la Planilla que desea cargar:",
-        "description": "Ingreso y administración de planillas SNIC-SAT.",
+        "label": "Planillas SNIC-SAT.",
+        "description": "Ingreso y administración de planillas.",
         "icon": "🗂️",
     }
 ]
