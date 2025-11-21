@@ -779,7 +779,7 @@ def render_admin_agenda(username: Optional[str], allowed_comisarias: Optional[Li
 def render_selector_comisaria(comisaria: str) -> Tuple[Optional[datetime.date], Dict[str, Dict[str, Any]], Optional[str]]:
     dias = obtener_dias_planificados(comisaria)
     if not dias:
-        return None, {}, "No hay delitos asignados por el administrador para esta comisaría."
+        return None, {}, "¡Felicitaciones! No hay delitos asignados por el administrador para esta comisaría."
 
     resumen = _resumen_estados_dias(comisaria)
 
