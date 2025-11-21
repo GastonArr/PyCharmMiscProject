@@ -58,7 +58,7 @@ def _comisaria_display(allowed: list[str] | None, current: str | None = None) ->
 def render_login() -> None:
     """Draw the login form and authenticate valid users."""
 
-    st.title("Ingreso a de cargas de planillas DSICCO")
+    st.title("Ingreso al sistema DSI-CCO")
     st.subheader("Ingrese sus credenciales para continuar")
     with st.form("login_form"):
         username_input = st.text_input("Usuario")
