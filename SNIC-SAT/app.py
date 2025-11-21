@@ -327,7 +327,10 @@ if st.session_state.step == 2:
     fecha_agenda, delitos_pendientes, mensaje_agenda = agenda_delitos.render_selector_comisaria(comisaria_actual)
 
     if mensaje_agenda:
-        st.warning(mensaje_agenda)
+        if mensaje_agenda.startswith("¡Felicitaciones!"):
+            st.success(mensaje_agenda)
+        else:
+            st.warning(mensaje_agenda)
         st.stop()
 
     if fecha_agenda is None:
@@ -335,7 +338,9 @@ if st.session_state.step == 2:
         st.stop()
 
     if not delitos_pendientes:
-        st.info("No hay delitos pendientes para el día seleccionado. Consulte al administrador para nuevas asignaciones.")
+        st.success(
+            "¡Felicitaciones! Ya cargaste todos los delitos asignados por el administrador para el día seleccionado. 🎉"
+        )
         st.stop()
 
     opciones_delito = list(delitos_pendientes.keys())
