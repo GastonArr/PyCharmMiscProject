@@ -14,9 +14,6 @@ from gcs_utils import (
     download_blob_bytes,
 )
 from login import render_login, render_user_header
-from system_selector import AVAILABLE_SYSTEMS, render_system_selector
-
-SYSTEM_SNICSAT_ID = "snic-sat"
 
 # ===========================
 # Config remota (bucket)
@@ -153,8 +150,6 @@ def _init_state():
     d.setdefault("authenticated", False)
     d.setdefault("username", None)
     d.setdefault("allowed_comisarias", None)
-    d.setdefault("selected_system", None)
-    d.setdefault("selected_system_label", None)
     d.setdefault("step", 1)
     d.setdefault("comisaria", None)
     d.setdefault("delito", None)
@@ -179,29 +174,9 @@ def _init_state():
 
 _init_state()
 
-
-def _ensure_system_label() -> None:
-    selected = st.session_state.get("selected_system")
-    if selected and not st.session_state.get("selected_system_label"):
-        for system in AVAILABLE_SYSTEMS:
-            if system.get("id") == selected:
-                st.session_state.selected_system_label = system.get("label")
-                break
-
 # Bloquear acceso si no está autenticado
 if not st.session_state.authenticated:
     render_login()
-    st.stop()
-
-_ensure_system_label()
-
-if not st.session_state.get("selected_system"):
-    render_system_selector()
-    st.stop()
-
-if st.session_state.selected_system != SYSTEM_SNICSAT_ID:
-    st.warning("Seleccione el sistema de carga Planilla SNIC-SAT para continuar.")
-    render_system_selector()
     st.stop()
 
 allowed_comisarias = st.session_state.allowed_comisarias or []
