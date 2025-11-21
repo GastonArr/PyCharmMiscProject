@@ -58,7 +58,7 @@ def _comisaria_display(allowed: list[str] | None, current: str | None = None) ->
 def render_login() -> None:
     """Draw the login form and authenticate valid users."""
 
-    st.title("Ingreso a de cargas de planillas DSICCO")
+    st.title("Ingreso al sistema SNIC")
     st.subheader("Ingrese sus credenciales para continuar")
     with st.form("login_form"):
         username_input = st.text_input("Usuario")
@@ -75,7 +75,6 @@ def render_login() -> None:
             st.session_state.username = username
             st.session_state.allowed_comisarias = allowed
             st.session_state.step = 1
-            st.session_state.selected_system = None
             st.rerun()
         else:
             st.error("Usuario o clave incorrectos. Verifique e intente nuevamente.")
@@ -87,11 +86,10 @@ def render_user_header() -> None:
     allowed = st.session_state.get("allowed_comisarias") or []
     current = st.session_state.get("comisaria")
     comisaria_label = _comisaria_display(allowed, current=current)
-    system_label = st.session_state.get("selected_system_label") or "Sin sistema seleccionado"
     col_info, col_logout = st.columns([4, 1])
     with col_info:
         st.success(
-            f"👮 Usuario: {st.session_state.get('username', 'Desconocido')} — Comisaría: {comisaria_label} — Sistema: {system_label}"
+            f"👮 Usuario: {st.session_state.get('username', 'Desconocido')} — Comisaría: {comisaria_label}"
         )
     with col_logout:
         if st.button("Cerrar sesión", use_container_width=True):
