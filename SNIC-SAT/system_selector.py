@@ -6,7 +6,7 @@ import streamlit as st
 AVAILABLE_SYSTEMS = [
     {
         "id": "snic-sat",
-        "label": "Sistema de carga Planilla SNIC-SAT",
+        "label": "Seleccione la Planilla que desea cargar:",
         "description": "Ingreso y administración de planillas SNIC-SAT.",
         "icon": "🗂️",
     }
@@ -18,6 +18,14 @@ def render_system_selector() -> None:
 
     st.title("Panel de sistemas DSICCO")
     st.caption("Seleccione el sistema con el que desea trabajar.")
+
+    col_header, col_logout = st.columns([4, 1])
+    with col_header:
+        st.empty()
+    with col_logout:
+        if st.button("Cerrar sesión", use_container_width=True):
+            st.session_state.clear()
+            st.rerun()
 
     for system in AVAILABLE_SYSTEMS:
         with st.container():
