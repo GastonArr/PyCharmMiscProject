@@ -29,7 +29,6 @@ def render_system_selector() -> None:
 
     for system in AVAILABLE_SYSTEMS:
         with st.container():
-            st.markdown(f"### {system['icon']} {system['label']}")
             st.caption(system.get("description", ""))
             if st.button(
                 f"{system['icon']} {system['label']}",
