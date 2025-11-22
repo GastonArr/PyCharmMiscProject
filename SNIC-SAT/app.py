@@ -101,19 +101,6 @@ def unwrap_quotes(v):
         return v[1:-1]
     return v
 
-
-def normalizar_preventivo(preventivo):
-    """Devuelve el preventivo normalizado y reemplaza "0" por "NO APORTA"."""
-
-    if preventivo is None:
-        return None
-    if not isinstance(preventivo, str):
-        preventivo = str(preventivo)
-    preventivo = preventivo.strip()
-    if preventivo == "0":
-        return "NO APORTA"
-    return preventivo
-
 def fecha_a_texto_curvo(fecha: datetime.date) -> str:
     if not isinstance(fecha, datetime.date):
         return None
@@ -428,9 +415,7 @@ if st.session_state.step == 2:
     )
     if preventivo_fijo:
         st.caption("Número asignado por el administrador. Solo se muestra para referencia.")
-    preventivo = normalizar_preventivo(
-        preventivo_asignado if preventivo_fijo else preventivo_input
-    )
+    preventivo = preventivo_asignado if preventivo_fijo else preventivo_input
     motivos = [
         "DENUNCIA PARTICULAR",
         "INTERVENCIÓN POLICIAL",
