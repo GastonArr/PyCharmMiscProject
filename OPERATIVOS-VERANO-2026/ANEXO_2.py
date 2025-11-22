@@ -1,6 +1,7 @@
-import streamlit as st
 from datetime import date, time, timedelta
-from typing import List, Dict
+from typing import Dict, List
+
+import streamlit as st
 
 from gcs_utils import load_workbook_from_gcs, save_workbook_to_gcs
 
@@ -137,7 +138,7 @@ def _guardar_por_unidad_anexo2(resultados: List[Dict]) -> int:
 def _resultado_vacio(vals: Dict) -> bool:
     """
     Consideramos un resultado "vacío" si:
-    - tipo_op, lugar y observ están vacíos
+    - tipo_op, lugar y observ están vacos
     - todos los números en 0
     - horas = 00:00
     """
