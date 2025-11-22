@@ -113,6 +113,13 @@ def _seleccionar_unidad(unidades_disponibles: list[str]) -> str:
     )
 
 
+def _cerrar_sesion() -> None:
+    st.sidebar.markdown("---")
+    if st.sidebar.button("Cerrar sesión", use_container_width=True):
+        st.session_state.clear()
+        st.rerun()
+
+
 def run_operativos_verano_app(
     allowed_units: list[str] | None = None,
     configure_page: bool = True,
@@ -121,6 +128,8 @@ def run_operativos_verano_app(
         st.set_page_config(page_title=APP_TITLE, layout="wide")
 
     unidades_disponibles = _unidades_habilitadas(allowed_units)
+
+    _cerrar_sesion()
 
     # -------------------------------------------------------------------
     # SESSION STATE
