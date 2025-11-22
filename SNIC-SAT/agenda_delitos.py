@@ -71,6 +71,8 @@ def _normalize_preventivo(value: Optional[Any]) -> Optional[str]:
     if not isinstance(value, str):
         value = str(value)
     value = value.strip()
+    if value == "0":
+        return "NO APORTA"
     return value or None
 
 

@@ -101,6 +101,19 @@ def unwrap_quotes(v):
         return v[1:-1]
     return v
 
+
+def normalizar_preventivo(preventivo):
+    """Formatea el preventivo reemplazando el 0 por "NO APORTA"."""
+
+    if preventivo is None:
+        return ""
+
+    texto = str(preventivo).strip()
+    if texto == "0":
+        return "NO APORTA"
+
+    return texto
+
 def fecha_a_texto_curvo(fecha: datetime.date) -> str:
     if not isinstance(fecha, datetime.date):
         return None
@@ -408,7 +421,9 @@ if st.session_state.step == 2:
     delito_nombre = delito_nombre_raw or delito
     preventivo_asignado = (info_delito_sel.get("preventivo") or "").strip()
     preventivo_fijo = bool(preventivo_asignado)
-    preventivo_valor = preventivo_asignado or (st.session_state.preventivo or "")
+    preventivo_valor = normalizar_preventivo(
+        preventivo_asignado or (st.session_state.preventivo or "")
+    )
     preventivo_input = st.text_input(
         "Ingrese el número de preventivo (máx 20 caracteres)",
         value=preventivo_valor,
@@ -417,7 +432,9 @@ if st.session_state.step == 2:
     )
     if preventivo_fijo:
         st.caption("Número asignado por el administrador. Solo se muestra para referencia.")
-    preventivo = preventivo_asignado if preventivo_fijo else preventivo_input
+    preventivo = normalizar_preventivo(
+        preventivo_asignado if preventivo_fijo else preventivo_input
+    )
     motivos = [
         "DENUNCIA PARTICULAR",
         "INTERVENCIÓN POLICIAL",
