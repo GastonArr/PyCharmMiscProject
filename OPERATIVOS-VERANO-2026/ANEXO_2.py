@@ -4,13 +4,15 @@ from datetime import date, time, timedelta
 from typing import List, Dict
 from openpyxl import load_workbook
 
+BASE_DIR = os.path.dirname(__file__)
+
 DATA_START_ROW_ANEXO2 = 7  # fila donde empiezan los datos en el Excel
 
 # Rutas por unidad
 UNIT_FILE_ANEXO2 = {
-    "comisaria 9":  os.path.join("Excel", "ANEXO II RESULTADOS OP VERANO-comisaria9.xlsx"),
-    "comisaria 42": os.path.join("Excel", "ANEXO II RESULTADOS OP VERANO-comisaria42.xlsx"),
-    "DTCCO-PH":     os.path.join("Excel", "ANEXO II RESULTADOS OP VERANO-DTCCO-PH.xlsx"),
+    "comisaria 9":  os.path.join(BASE_DIR, "Excel", "ANEXO II RESULTADOS OP VERANO-comisaria9.xlsx"),
+    "comisaria 42": os.path.join(BASE_DIR, "Excel", "ANEXO II RESULTADOS OP VERANO-comisaria42.xlsx"),
+    "DTCCO-PH":     os.path.join(BASE_DIR, "Excel", "ANEXO II RESULTADOS OP VERANO-DTCCO-PH.xlsx"),
 }
 
 
