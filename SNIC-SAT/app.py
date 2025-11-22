@@ -171,6 +171,28 @@ def excel_path_por_comisaria(nombre_comisaria: str) -> str:
     base = _BASE_POR_COMISARIA.get(nombre_comisaria, excel_base_cenaf_4)
     return resolve_excel_path(base)
 
+
+@st.cache_data(show_spinner=False)
+def _cached_excel_path(nombre_comisaria: str, refresh_token: int) -> str:
+    base = _BASE_POR_COMISARIA.get(nombre_comisaria, excel_base_cenaf_4)
+    return resolve_excel_path(base)
+
+
+@st.cache_data(show_spinner=False)
+def _prepare_excel_context(nombre_comisaria: str, refresh_token: int):
+    excel_path = _cached_excel_path(nombre_comisaria, refresh_token)
+    asegurar_excel(excel_path)
+    fila_objetivo = obtener_siguiente_fila_por_fecha(excel_path, col_fecha="C")
+    planilla_llena = fila_objetivo >= 103
+    excel_bytes = download_blob_bytes(excel_path)
+    return excel_path, fila_objetivo, planilla_llena, excel_bytes
+
+
+def _invalidate_excel_caches():
+    _cached_excel_path.clear()
+    _prepare_excel_context.clear()
+    st.session_state["excel_refresh_token"] = st.session_state.get("excel_refresh_token", 0) + 1
+
 # ---------------------------
 # Estado de sesión
 # ---------------------------
@@ -195,6 +217,7 @@ def _init_state():
     d.setdefault("fecha_hecho", None)
     d.setdefault("hora_hecho", None)
     d.setdefault("hora_fin", None)
+    d.setdefault("excel_refresh_token", 0)
     d.setdefault("preventivo", "")
     d.setdefault("denunciante", "")
     d.setdefault("motivo", "")
@@ -279,10 +302,10 @@ if usuario_es_admin and len(allowed_comisarias) > 1:
         st.rerun()
 
 comisaria_actual = st.session_state.comisaria
-excel_path_preview = excel_path_por_comisaria(comisaria_actual)
-asegurar_excel(excel_path_preview)
-fila_objetivo = obtener_siguiente_fila_por_fecha(excel_path_preview, col_fecha="C")
-planilla_llena = fila_objetivo >= 103
+excel_path_preview, fila_objetivo, planilla_llena, excel_bytes = _prepare_excel_context(
+    comisaria_actual,
+    st.session_state.excel_refresh_token,
+)
 
 st.session_state.excel_path = excel_path_preview
 st.session_state.fila = fila_objetivo
@@ -323,7 +346,6 @@ with col_dl:
     else:  # .xls u otro
         mime = "application/vnd.ms-excel"
 
-    excel_bytes = download_blob_bytes(excel_path_preview)
     if excel_bytes is None:
         st.caption("⚠️ No se encontró el Excel en el bucket. Se creará automáticamente cuando continúe.")
     else:
@@ -357,6 +379,7 @@ if usuario_es_admin:
                         uploaded.getbuffer().tobytes(),
                     )
                     st.success(f"Se reemplazó el Excel de {comisaria_actual}: {expected_name}")
+                    _invalidate_excel_caches()
                 except Exception as e:
                     st.error(f"No se pudo guardar el archivo en el bucket: {e}")
 
@@ -1015,6 +1038,7 @@ elif st.session_state.step == 6:
                         st.caption("✔️ Se completó la carga planificada para este delito en el día seleccionado.")
 
                 st.success(f"Datos guardados en {st.session_state.comisaria} (fila {fila_a_mostrar(fila)}) ✅")
+                _invalidate_excel_caches()
                 # Reset total
                 st.session_state.step = 1
                 st.session_state.hecho = None
