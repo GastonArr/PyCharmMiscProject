@@ -207,23 +207,34 @@ def _ensure_entry(data: AgendaData, comisaria: str, fecha: datetime.date) -> Dic
 def _generar_etiquetas(detalle: Dict[str, Dict[str, Any]]) -> Dict[str, str]:
     conteos: Dict[str, int] = {}
     for info in detalle.values():
-        nombre = (info.get("nombre") or "").strip()
-        if not nombre:
-            nombre = "Delito"
-        conteos[nombre] = conteos.get(nombre, 0) + 1
+        nombre_norm = info.get("nombre_normalizado")
+        if not nombre_norm:
+            nombre_norm = (info.get("nombre") or "").strip()
+        if not nombre_norm:
+            nombre_norm = "Delito"
+        conteos[nombre_norm] = conteos.get(nombre_norm, 0) + 1
 
     indices: Dict[str, int] = {}
     etiquetas: Dict[str, str] = {}
-    for delito_id, info in sorted(detalle.items(), key=lambda par: (str(par[1].get("nombre") or par[0]).casefold(), par[0])):
-        nombre = (info.get("nombre") or "").strip()
-        if not nombre:
-            nombre = delito_id
-        total = conteos.get(nombre, 1)
+    for delito_id, info in sorted(
+        detalle.items(),
+        key=lambda par: (
+            str(par[1].get("nombre_normalizado") or par[1].get("nombre") or par[0]).casefold(),
+            par[0],
+        ),
+    ):
+        nombre_norm = info.get("nombre_normalizado")
+        if not nombre_norm:
+            nombre_norm = (info.get("nombre") or "").strip() or delito_id
+        nombre_raw = info.get("nombre") if isinstance(info.get("nombre"), str) else ""
+        nombre_para_etiqueta = nombre_raw or nombre_norm
+
+        total = conteos.get(nombre_norm, 1)
         if total > 1:
-            indices[nombre] = indices.get(nombre, 0) + 1
-            etiquetas[delito_id] = f"{nombre} #{indices[nombre]}"
+            indices[nombre_norm] = indices.get(nombre_norm, 0) + 1
+            etiquetas[delito_id] = f"{nombre_para_etiqueta} #{indices[nombre_norm]}"
         else:
-            etiquetas[delito_id] = nombre
+            etiquetas[delito_id] = nombre_para_etiqueta
     return etiquetas
 
 
@@ -253,12 +264,16 @@ def obtener_detalle_dia(comisaria: str, fecha: datetime.date) -> Dict[str, Dict[
         plan = int(valores.get("plan", 0))
         cargados = int(valores.get("cargados", 0))
         preventivo = _normalize_preventivo(valores.get("preventivo"))
-        nombre = (valores.get("nombre") or "").strip() or delito_id
+        nombre_raw = valores.get("nombre")
+        if nombre_raw is None:
+            nombre_raw = delito_id
+        nombre_norm = (nombre_raw or "").strip() or delito_id
         if plan <= 0:
             plan = 1
         cargados = 1 if cargados > 0 else 0
         resultado[delito_id] = {
-            "nombre": nombre,
+            "nombre": nombre_raw,
+            "nombre_normalizado": nombre_norm,
             "plan": 1,
             "cargados": cargados,
             "preventivo": preventivo,
@@ -277,12 +292,16 @@ def obtener_delitos_pendientes(comisaria: str, fecha: datetime.date) -> Dict[str
             # Si ya se cargó este delito, no debe mostrarse más
             continue
 
+        nombre_raw = valores.get("nombre")
+        nombre_norm = valores.get("nombre_normalizado") or (nombre_raw or delito_id).strip() or delito_id
+
         pendientes[delito_id] = {
             "plan": plan,
             "cargados": cargados,
             "restantes": restantes,
             "preventivo": valores.get("preventivo"),
-            "nombre": valores.get("nombre", delito_id),
+            "nombre": nombre_raw,
+            "nombre_normalizado": nombre_norm,
         }
     return pendientes
 
