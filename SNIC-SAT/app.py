@@ -1,6 +1,8 @@
 import streamlit as st
 import datetime
 import os
+import runpy
+import sys
 import direcciones          # módulo externo para pantalla de direcciones streamlit run app.py
 import Robos_Hurtos         # subflujo para delitos Robos/Hurtos
 import otros                # subflujo para Lesiones / Desaparición
@@ -14,9 +16,12 @@ from gcs_utils import (
     download_blob_bytes,
 )
 from login import render_login, render_user_header
-from system_selector import AVAILABLE_SYSTEMS, render_system_selector
-
-SYSTEM_SNICSAT_ID = "snic-sat"
+from system_selector import (
+    AVAILABLE_SYSTEMS,
+    SYSTEM_OPERATIVOS_VERANO_ID,
+    SYSTEM_SNICSAT_ID,
+    render_system_selector,
+)
 
 # ===========================
 # Config remota (bucket)
@@ -153,6 +158,7 @@ def _init_state():
     d.setdefault("authenticated", False)
     d.setdefault("username", None)
     d.setdefault("allowed_comisarias", None)
+    d.setdefault("allowed_systems", None)
     d.setdefault("selected_system", None)
     d.setdefault("selected_system_label", None)
     d.setdefault("step", 1)
@@ -197,6 +203,29 @@ _ensure_system_label()
 
 if not st.session_state.get("selected_system"):
     render_system_selector()
+    st.stop()
+
+allowed_systems = st.session_state.get("allowed_systems") or []
+if allowed_systems and st.session_state.selected_system not in allowed_systems:
+    st.warning("Seleccione uno de los sistemas habilitados para su usuario.")
+    render_system_selector()
+    st.stop()
+
+if st.session_state.selected_system == SYSTEM_OPERATIVOS_VERANO_ID:
+    render_user_header()
+
+    repo_root = os.path.dirname(os.path.dirname(__file__))
+    operativos_dir = os.path.join(repo_root, "OPERATIVOS-VERANO-2026")
+    operativos_app_path = os.path.join(operativos_dir, "operativos_verano_app.py")
+
+    if operativos_dir not in sys.path:
+        sys.path.insert(0, operativos_dir)
+
+    if not os.path.exists(operativos_app_path):
+        st.error("No se encontró la aplicación de Operativos Verano.")
+        st.stop()
+
+    runpy.run_path(operativos_app_path, run_name="__main__")
     st.stop()
 
 if st.session_state.selected_system != SYSTEM_SNICSAT_ID:
