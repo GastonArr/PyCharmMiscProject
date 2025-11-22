@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import streamlit as st
-from system_selector import SYSTEM_OPERATIVOS_VERANO_ID, SYSTEM_SNICSAT_ID
 
 COMISARIA_OPTIONS = [
     "Comisaria 14",
@@ -17,42 +16,30 @@ USERS = {
     "Gaston": {
         "password": "10Capo555",
         "comisarias": COMISARIA_OPTIONS,
-        "systems": [SYSTEM_SNICSAT_ID, SYSTEM_OPERATIVOS_VERANO_ID],
     },
     "comisaria14": {
         "password": "comisaria14@",
         "comisarias": ["Comisaria 14"],
-        "systems": [SYSTEM_SNICSAT_ID],
     },
     "comisaria6": {
         "password": "comisaria6@",
         "comisarias": ["Comisaria 6"],
-        "systems": [SYSTEM_SNICSAT_ID],
     },
     "comisaria15": {
         "password": "comisaria15@",
         "comisarias": ["Comisaria 15"],
-        "systems": [SYSTEM_SNICSAT_ID],
     },
     "comiaria9": {
         "password": "comisaria9@",
         "comisarias": ["Comisaria 9"],
-        "systems": [SYSTEM_SNICSAT_ID, SYSTEM_OPERATIVOS_VERANO_ID],
     },
     "comiariacenaf": {
         "password": "comisariacenaf@",
         "comisarias": ["CENAF 4"],
-        "systems": [SYSTEM_SNICSAT_ID],
     },
     "comiaria42": {
         "password": "comisaria42@",
         "comisarias": ["Comisaria 42"],
-        "systems": [SYSTEM_SNICSAT_ID, SYSTEM_OPERATIVOS_VERANO_ID],
-    },
-    "DTCCO-PH": {
-        "password": "DTCCO-PH@",
-        "comisarias": ["DTCCO-PH"],
-        "systems": [SYSTEM_OPERATIVOS_VERANO_ID],
     },
 }
 
@@ -83,12 +70,10 @@ def render_login() -> None:
         user_data = USERS.get(username)
         if user_data and password_input == user_data.get("password"):
             allowed = list(user_data.get("comisarias", []))
-            allowed_systems = list(user_data.get("systems", [SYSTEM_SNICSAT_ID]))
             st.session_state.clear()
             st.session_state.authenticated = True
             st.session_state.username = username
             st.session_state.allowed_comisarias = allowed
-            st.session_state.allowed_systems = allowed_systems
             st.session_state.step = 1
             st.session_state.selected_system = None
             st.rerun()
