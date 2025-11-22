@@ -101,6 +101,19 @@ def unwrap_quotes(v):
         return v[1:-1]
     return v
 
+
+def normalizar_preventivo(preventivo):
+    """Formatea el preventivo reemplazando el 0 por "NO APORTA"."""
+
+    if preventivo is None:
+        return ""
+
+    texto = str(preventivo).strip()
+    if texto == "0":
+        return "NO APORTA"
+
+    return texto
+
 def fecha_a_texto_curvo(fecha: datetime.date) -> str:
     if not isinstance(fecha, datetime.date):
         return None
@@ -185,6 +198,9 @@ def _init_state():
     d.setdefault("preventivo", "")
     d.setdefault("denunciante", "")
     d.setdefault("motivo", "")
+    d.setdefault("excel_context_dirty", True)
+    d.setdefault("excel_context_comisaria", None)
+    d.setdefault("excel_download_bytes", None)
     # Subflujos
     d.setdefault("rh_done", False)
     d.setdefault("rh_preview", None)       # resumen Robos/Hurtos
@@ -193,6 +209,33 @@ def _init_state():
     d.setdefault("direcciones_preview", None)  # resumen Direcciones
 
 _init_state()
+
+
+def refresh_excel_context(comisaria_actual: str) -> None:
+    """Carga datos derivados del Excel solo cuando hay cambios relevantes.
+
+    Evita re-descargar o recontar filas en cada interacción de la UI
+    para mejorar la respuesta de la aplicación.
+    """
+
+    if st.session_state.excel_context_comisaria != comisaria_actual:
+        st.session_state.excel_context_dirty = True
+        st.session_state.excel_download_bytes = None
+
+    if not st.session_state.excel_context_dirty:
+        return
+
+    excel_path_preview = excel_path_por_comisaria(comisaria_actual)
+    asegurar_excel(excel_path_preview)
+    fila_objetivo = obtener_siguiente_fila_por_fecha(excel_path_preview, col_fecha="C")
+    planilla_llena = fila_objetivo >= 103
+
+    st.session_state.excel_path = excel_path_preview
+    st.session_state.fila = fila_objetivo
+    st.session_state.planilla_llena = planilla_llena
+    st.session_state.excel_context_comisaria = comisaria_actual
+    st.session_state.excel_context_dirty = False
+    st.session_state.excel_download_bytes = download_blob_bytes(excel_path_preview)
 
 
 def _ensure_system_label() -> None:
@@ -263,17 +306,14 @@ if usuario_es_admin and len(allowed_comisarias) > 1:
     if seleccion != st.session_state.comisaria:
         st.session_state.comisaria = seleccion
         st.session_state.step = 1
+        st.session_state.excel_context_dirty = True
         st.rerun()
 
 comisaria_actual = st.session_state.comisaria
-excel_path_preview = excel_path_por_comisaria(comisaria_actual)
-asegurar_excel(excel_path_preview)
-fila_objetivo = obtener_siguiente_fila_por_fecha(excel_path_preview, col_fecha="C")
-planilla_llena = fila_objetivo >= 103
-
-st.session_state.excel_path = excel_path_preview
-st.session_state.fila = fila_objetivo
-st.session_state.planilla_llena = planilla_llena
+refresh_excel_context(comisaria_actual)
+excel_path_preview = st.session_state.excel_path
+fila_objetivo = st.session_state.fila
+planilla_llena = st.session_state.planilla_llena
 
 render_user_header()
 
@@ -310,7 +350,7 @@ with col_dl:
     else:  # .xls u otro
         mime = "application/vnd.ms-excel"
 
-    excel_bytes = download_blob_bytes(excel_path_preview)
+    excel_bytes = st.session_state.excel_download_bytes
     if excel_bytes is None:
         st.caption("⚠️ No se encontró el Excel en el bucket. Se creará automáticamente cuando continúe.")
     else:
@@ -344,6 +384,9 @@ if usuario_es_admin:
                         uploaded.getbuffer().tobytes(),
                     )
                     st.success(f"Se reemplazó el Excel de {comisaria_actual}: {expected_name}")
+                    st.session_state.excel_download_bytes = uploaded.getbuffer().tobytes()
+                    st.session_state.excel_context_dirty = True
+                    st.rerun()
                 except Exception as e:
                     st.error(f"No se pudo guardar el archivo en el bucket: {e}")
 
@@ -408,7 +451,9 @@ if st.session_state.step == 2:
     delito_nombre = delito_nombre_raw or delito
     preventivo_asignado = (info_delito_sel.get("preventivo") or "").strip()
     preventivo_fijo = bool(preventivo_asignado)
-    preventivo_valor = preventivo_asignado or (st.session_state.preventivo or "")
+    preventivo_valor = normalizar_preventivo(
+        preventivo_asignado or (st.session_state.preventivo or "")
+    )
     preventivo_input = st.text_input(
         "Ingrese el número de preventivo (máx 20 caracteres)",
         value=preventivo_valor,
@@ -417,7 +462,9 @@ if st.session_state.step == 2:
     )
     if preventivo_fijo:
         st.caption("Número asignado por el administrador. Solo se muestra para referencia.")
-    preventivo = preventivo_asignado if preventivo_fijo else preventivo_input
+    preventivo = normalizar_preventivo(
+        preventivo_asignado if preventivo_fijo else preventivo_input
+    )
     motivos = [
         "DENUNCIA PARTICULAR",
         "INTERVENCIÓN POLICIAL",
@@ -1018,6 +1065,8 @@ elif st.session_state.step == 6:
                 st.session_state.others_done = False
                 st.session_state.others_preview = None
                 st.session_state.direcciones_preview = None
+                st.session_state.excel_context_dirty = True
+                st.session_state.excel_download_bytes = None
                 st.rerun()
             else:
                 st.error("Hubo un problema al guardar. Revise el mensaje de error arriba.")
