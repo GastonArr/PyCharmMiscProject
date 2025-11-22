@@ -1,18 +1,16 @@
-import os
 import streamlit as st
 from datetime import date, time, timedelta
 from typing import List, Dict
-from openpyxl import load_workbook
 
-BASE_DIR = os.path.dirname(__file__)
+from gcs_utils import load_workbook_from_gcs, save_workbook_to_gcs
 
 DATA_START_ROW_ANEXO2 = 7  # fila donde empiezan los datos en el Excel
 
-# Rutas por unidad
+# Rutas (en GCS) por unidad
 UNIT_FILE_ANEXO2 = {
-    "comisaria 9":  os.path.join(BASE_DIR, "Excel", "ANEXO II RESULTADOS OP VERANO-comisaria9.xlsx"),
-    "comisaria 42": os.path.join(BASE_DIR, "Excel", "ANEXO II RESULTADOS OP VERANO-comisaria42.xlsx"),
-    "DTCCO-PH":     os.path.join(BASE_DIR, "Excel", "ANEXO II RESULTADOS OP VERANO-DTCCO-PH.xlsx"),
+    "comisaria 9": "operativos-verano/anexo2/anexo2-comisaria9.xlsx",
+    "comisaria 42": "operativos-verano/anexo2/anexo2-comisaria42.xlsx",
+    "DTCCO-PH": "operativos-verano/anexo2/anexo2-DTCCO-PH.xlsx",
 }
 
 
@@ -23,7 +21,7 @@ def _get_next_row_and_counter(path: str, data_start_row: int = DATA_START_ROW_AN
     """
     Devuelve (wb, ws, next_row, next_number) para escribir en la columna A.
     """
-    wb = load_workbook(path)
+    wb = load_workbook_from_gcs(path)
     ws = wb.active
 
     last_row = None
@@ -101,14 +99,7 @@ def _guardar_todos_anexo2(ruta_excel: str, resultados: List[Dict]) -> int:
         ws.cell(row=row, column=18).value = rec_mat
         ws.cell(row=row, column=19).value = observ
 
-    try:
-        wb.save(ruta_excel)
-    except PermissionError:
-        st.error(
-            f"No se pudo guardar el archivo '{ruta_excel}'. "
-            "Verifique que no esté abierto en otra aplicación e intente nuevamente."
-        )
-        st.stop()
+    save_workbook_to_gcs(wb, ruta_excel)
 
     return len(resultados)
 

@@ -1,18 +1,16 @@
-import os
 import streamlit as st
 from datetime import date, time, timedelta
 from typing import List, Dict
-from openpyxl import load_workbook
 
-BASE_DIR = os.path.dirname(__file__)
+from gcs_utils import load_workbook_from_gcs, save_workbook_to_gcs
 
 DATA_START_ROW_ANEXO1 = 7  # fila donde empiezan los datos en el Excel
 
-# Rutas por unidad
+# Rutas (en GCS) por unidad
 UNIT_FILE_ANEXO1 = {
-    "comisaria 9":  os.path.join(BASE_DIR, "Excel", "ANEXO I DIAGRAMAS OP VERANO DSICCO-comisaria9.xlsx"),
-    "comisaria 42": os.path.join(BASE_DIR, "Excel", "ANEXO I DIAGRAMAS OP VERANO DSICCO-comisaria42.xlsx"),
-    "DTCCO-PH":     os.path.join(BASE_DIR, "Excel", "ANEXO I DIAGRAMAS OP VERANO DSICCO-DTCCO-PH.xlsx"),
+    "comisaria 9": "operativos-verano/anexo1/anexo1-comisaria9.xlsx",
+    "comisaria 42": "operativos-verano/anexo1/anexo1-comisaria42.xlsx",
+    "DTCCO-PH": "operativos-verano/anexo1/anexo1-DTCCO-PH.xlsx",
 }
 
 
@@ -23,7 +21,7 @@ def _get_next_row_and_counter(path: str, data_start_row: int = DATA_START_ROW_AN
     """
     Devuelve (wb, ws, next_row, next_number) para escribir en la columna A.
     """
-    wb = load_workbook(path)
+    wb = load_workbook_from_gcs(path)
     ws = wb.active
 
     last_row = None
@@ -78,14 +76,7 @@ def _guardar_todos_anexo1(ruta_excel: str, diagramas: List[Dict]) -> int:
         texto_horas = f"{hora_desde.strftime('%H:%M')} - {hora_hasta.strftime('%H:%M')}"
         ws.cell(row=row, column=7).value = texto_horas
 
-    try:
-        wb.save(ruta_excel)
-    except PermissionError:
-        st.error(
-            f"No se pudo guardar el archivo '{ruta_excel}'. "
-            "Verifique que no esté abierto en otra aplicación."
-        )
-        st.stop()
+    save_workbook_to_gcs(wb, ruta_excel)
 
     return len(diagramas)
 

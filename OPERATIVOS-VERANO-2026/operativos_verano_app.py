@@ -1,4 +1,4 @@
-import os
+import io
 from datetime import date, timedelta
 
 import pandas as pd
@@ -6,17 +6,16 @@ import streamlit as st
 
 from ANEXO_1 import mostrar_anexo1
 from ANEXO_2 import mostrar_anexo_2
+from gcs_utils import download_blob_bytes, upload_blob_bytes
 
 APP_TITLE = "Operativos Verano"
-BASE_DIR = os.path.dirname(__file__)
-EXCEL_DIR = os.path.join(BASE_DIR, "Excel")
 
 # Este parámetro ya no se usa para elegir archivo (eso se hace por unidad),
-# pero lo dejamos por compatibilidad con las funciones de los anexos.
-ANEXO1_PATH = os.path.join(EXCEL_DIR, "ANEXO I DIAGRAMAS OP VERANO DSICCO.xlsx")
-ANEXO2_PATH = os.path.join(EXCEL_DIR, "ANEXO II RESULTADOS OP VERANO.xlsx")
+# pero se mantiene por compatibilidad con las funciones de los anexos.
+ANEXO1_PATH = "operativos-verano/anexo1/anexo1.xlsx"
+ANEXO2_PATH = "operativos-verano/anexo2/anexo2.xlsx"
 
-ESTADO_PATH = os.path.join(BASE_DIR, "estado_carga_operativos.csv")
+ESTADO_BLOB = "operativos-verano/estado_carga_operativos.csv"
 DIA_INICIO = 19   # solo para fecha_default de formularios
 
 # La planilla empieza a usarse a partir de esta fecha
@@ -33,9 +32,9 @@ def cargar_estado():
     Carga el CSV de estado.
     Estructura esperada: fecha, unidad, anexo1_completo, anexo2_completo
     """
-    if os.path.exists(ESTADO_PATH):
-        df = pd.read_csv(ESTADO_PATH)
-        # Aseguramos columnas mínimas
+    data = download_blob_bytes(ESTADO_BLOB)
+    if data:
+        df = pd.read_csv(io.BytesIO(data))
         if "fecha" not in df.columns or "unidad" not in df.columns:
             df = pd.DataFrame(columns=["fecha", "unidad", "anexo1_completo", "anexo2_completo"])
     else:
@@ -49,7 +48,9 @@ def cargar_estado():
 
 
 def guardar_estado(df_estado):
-    df_estado.to_csv(ESTADO_PATH, index=False)
+    buffer = io.StringIO()
+    df_estado.to_csv(buffer, index=False)
+    upload_blob_bytes(ESTADO_BLOB, buffer.getvalue().encode("utf-8"), content_type="text/csv")
 
 
 def asegurar_fila_estado(df_estado, fecha_objetivo: date, unidad: str):
