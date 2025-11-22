@@ -612,12 +612,12 @@ elif st.session_state.step == 6:
     delito_now_norm = (st.session_state.delito or "").strip()
 
     delitos_rh = {
-        "ROBO SIMPLE ",
-        "HURTO SIMPLE ",
+        "ROBO SIMPLE",
+        "HURTO SIMPLE",
         "ROBO AGRAVADO POR EL USO DE ARMA DE ARMA BLANCA",
         "ROBO AGRAVADO POR EL USO DE ARMA DE FUEGO",
-        "ROBO ABIGEATO ",
-        "ROBO AGRAVADO POR LESION ",
+        "ROBO ABIGEATO",
+        "ROBO AGRAVADO POR LESION",
     }
     delitos_rh_norm = {d.strip() for d in delitos_rh}
 
