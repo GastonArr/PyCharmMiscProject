@@ -3,22 +3,13 @@ from __future__ import annotations
 
 import streamlit as st
 
-SYSTEM_SNICSAT_ID = "snic-sat"
-SYSTEM_OPERATIVOS_VERANO_ID = "operativos-verano"
-
 AVAILABLE_SYSTEMS = [
     {
-        "id": SYSTEM_SNICSAT_ID,
+        "id": "snic-sat",
         "label": "Planillas SNIC-SAT.",
         "description": "Ingreso y administración de planillas.",
         "icon": "🗂️",
-    },
-    {
-        "id": SYSTEM_OPERATIVOS_VERANO_ID,
-        "label": "Planillas Operativo Verano",
-        "description": "Carga de anexos y seguimiento diario de operativos.",
-        "icon": "🏖️",
-    },
+    }
 ]
 
 
@@ -36,21 +27,7 @@ def render_system_selector() -> None:
             st.session_state.clear()
             st.rerun()
 
-    allowed_systems = st.session_state.get("allowed_systems")
-
-    systems_to_show = [
-        system
-        for system in AVAILABLE_SYSTEMS
-        if not allowed_systems or system.get("id") in allowed_systems
-    ]
-
-    if not systems_to_show:
-        st.warning(
-            "Su usuario no tiene sistemas habilitados. Contacte al administrador del sistema."
-        )
-        return
-
-    for system in systems_to_show:
+    for system in AVAILABLE_SYSTEMS:
         with st.container():
             st.caption(system.get("description", ""))
             if st.button(
