@@ -41,8 +41,8 @@ USERS = {
         "comisarias": ["Comisaria 9"],
         "systems": ["snic-sat", "operativos-verano"],
     },
-    "comiariacenaf": {
-        "password": "comisariacenaf@",
+    "CENAF 4": {
+        "password": "CENAF 4@",
         "comisarias": ["CENAF 4"],
         "systems": DEFAULT_SYSTEMS,
     },
