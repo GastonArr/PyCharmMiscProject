@@ -50,12 +50,12 @@ def mostrar_hecho_referencia():
 # Delitos que activan este flujo
 # ==============================
 DELITOS_APLICA = {
-    "ROBO SIMPLE",
-    "HURTO SIMPLE",
+    "ROBO SIMPLE ",
+    "HURTO SIMPLE ",
     "ROBO AGRAVADO POR EL USO DE ARMA DE ARMA BLANCA",
     "ROBO AGRAVADO POR EL USO DE ARMA DE FUEGO",
-    "ROBO ABIGEATO",
-    "ROBO AGRAVADO POR LESION",
+    "ROBO ABIGEATO ",
+    "ROBO AGRAVADO POR LESION ",
 }
 DELITOS_APLICA_STRIPPED = {d.strip() for d in DELITOS_APLICA}
 
