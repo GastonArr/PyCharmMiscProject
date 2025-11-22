@@ -60,7 +60,7 @@ def mostrar_hecho_referencia():
 # ==============================
 # Delitos que activan este flujo
 # ==============================
-# Importante: los nombres vienen normalizados sin espacios finales, pero usamos .strip() al comparar para mantener robustez.
+# Importante: usamos .strip() al comparar, para tolerar espacios finales en la lista principal.
 DELITOS_LESIONES = {
     "LESIONES GRAVES",
     "LESIONES LEVES",
