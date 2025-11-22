@@ -1,24 +1,22 @@
-import streamlit as st
-import pandas as pd
 import os
 from datetime import date, timedelta
+
+import pandas as pd
+import streamlit as st
 
 from ANEXO_1 import mostrar_anexo1
 from ANEXO_2 import mostrar_anexo_2
 
-# -------------------------------------------------------------------
-# CONFIGURACIÓN BÁSICA
-# -------------------------------------------------------------------
-st.set_page_config(page_title="Operativos Verano", layout="wide")
-
-EXCEL_DIR = "Excel"
+APP_TITLE = "Operativos Verano"
+BASE_DIR = os.path.dirname(__file__)
+EXCEL_DIR = os.path.join(BASE_DIR, "Excel")
 
 # Este parámetro ya no se usa para elegir archivo (eso se hace por unidad),
 # pero lo dejamos por compatibilidad con las funciones de los anexos.
 ANEXO1_PATH = os.path.join(EXCEL_DIR, "ANEXO I DIAGRAMAS OP VERANO DSICCO.xlsx")
 ANEXO2_PATH = os.path.join(EXCEL_DIR, "ANEXO II RESULTADOS OP VERANO.xlsx")
 
-ESTADO_PATH = "estado_carga_operativos.csv"
+ESTADO_PATH = os.path.join(BASE_DIR, "estado_carga_operativos.csv")
 DIA_INICIO = 19   # solo para fecha_default de formularios
 
 # La planilla empieza a usarse a partir de esta fecha
@@ -93,173 +91,182 @@ def fecha_inicio_por_defecto(hoy: date) -> date:
     return date(hoy.year, hoy.month, DIA_INICIO)
 
 
-# -------------------------------------------------------------------
-# SESSION STATE
-# -------------------------------------------------------------------
-if "pantalla" not in st.session_state:
-    st.session_state["pantalla"] = "bienvenida"
-
-if "unidad_actual" not in st.session_state:
-    st.session_state["unidad_actual"] = None
-
-
-# -------------------------------------------------------------------
-# SELECCIÓN DE UNIDAD (por ahora manual; luego será login)
-# -------------------------------------------------------------------
-st.sidebar.title("Configuración de unidad")
-unidad_seleccionada = st.sidebar.selectbox(
-    "Seleccione la unidad con la que quiere trabajar:",
-    ["(Seleccione una unidad)"] + UNIDADES,
-)
-
-if unidad_seleccionada == "(Seleccione una unidad)":
-    st.title("BIENVENIDO AL SISTEMA DE CARGA OPERATIVOS VERANO")
-    st.info("Por favor, seleccione una unidad en el menú lateral para comenzar.")
-    st.stop()
-
-# Guardamos la unidad actual en session_state
-st.session_state["unidad_actual"] = unidad_seleccionada
-unidad_actual = unidad_seleccionada
+def _unidades_habilitadas(allowed_units: list[str] | None) -> list[str]:
+    if not allowed_units:
+        return UNIDADES
+    unidades_validas: list[str] = []
+    for unidad in allowed_units:
+        if unidad in UNIDADES and unidad not in unidades_validas:
+            unidades_validas.append(unidad)
+    return unidades_validas or UNIDADES
 
 
-# -------------------------------------------------------------------
-# LÓGICA PRINCIPAL
-# -------------------------------------------------------------------
-hoy = date.today()
-
-# Si todavía no llegamos a la fecha de inicio, no se habilita la carga
-if hoy < START_DATE:
-    st.title("BIENVENIDO AL SISTEMA DE CARGA OPERATIVOS VERANO")
-    st.subheader(f"Unidad: {unidad_actual}")
-    st.info(
-        "La planilla de carga de OPERATIVOS VERANO comenzará a utilizarse "
-        f"a partir del día {START_DATE.strftime('%d/%m/%Y')}."
-    )
-    st.stop()
-
-df_estado = cargar_estado()
-
-# Buscar la primera fecha entre START_DATE y hoy cuya carga NO esté completa
-# para la unidad_actual
-fecha_objetivo = None
-idx_estado = None
-
-dia = START_DATE
-while dia <= hoy:
-    df_estado, idx = asegurar_fila_estado(df_estado, dia, unidad_actual)
-    anexo1_completo = bool(df_estado.loc[idx, "anexo1_completo"])
-    anexo2_completo = bool(df_estado.loc[idx, "anexo2_completo"])
-
-    if not (anexo1_completo and anexo2_completo):
-        fecha_objetivo = dia
-        idx_estado = idx
-        break
-
-    dia += timedelta(days=1)
-
-# Si fecha_objetivo sigue en None → esta unidad está al día hasta hoy
-if fecha_objetivo is None:
-    st.title("BIENVENIDO AL SISTEMA DE CARGA OPERATIVOS VERANO")
-    st.subheader(f"Unidad: {unidad_actual}")
-    st.subheader("Estado de la carga")
-
-    ultima_fecha_operativos = hoy - timedelta(days=1)
-    st.success(
-        f"La unidad **{unidad_actual}** está al día con la carga de OPERATIVOS VERANO.\n\n"
-        f"La última fecha de operativos cargados es: "
-        f"{ultima_fecha_operativos.strftime('%d/%m/%Y')}.\n\n"
-        "ESPERE AL DÍA SIGUIENTE PARA CONTINUAR."
-    )
-    st.stop()
-
-# A partir de acá trabajamos sobre la fecha_objetivo encontrada
-fecha_default = fecha_inicio_por_defecto(hoy)
-anexo1_completo = bool(df_estado.loc[idx_estado, "anexo1_completo"])
-anexo2_completo = bool(df_estado.loc[idx_estado, "anexo2_completo"])
-
-# Mensaje de cambio de día (si viene de la ejecución anterior)
-mensaje_cambio = st.session_state.pop("mensaje_cambio_dia", None)
-if mensaje_cambio:
-    st.success(mensaje_cambio)
-
-# Pantalla inicial según estado para esa fecha_objetivo
-if st.session_state["pantalla"] == "bienvenida":
-    if not anexo1_completo:
-        st.session_state["pantalla"] = "anexo1"
-    elif anexo1_completo and not anexo2_completo:
-        st.session_state["pantalla"] = "anexo2"
-
-
-# -------------------------------------------------------------------
-# PANTALLA ANEXO I
-# -------------------------------------------------------------------
-if st.session_state["pantalla"] == "anexo1":
-    # ruta_excel se ignora dentro de mostrar_anexo1 (usa archivos por unidad),
-    # pero se mantiene el parámetro para compatibilidad
-    finalizado_anexo1 = mostrar_anexo1(
-        ruta_excel=ANEXO1_PATH,
-        fecha_objetivo=fecha_objetivo,
-        fecha_default=fecha_default,
+def _seleccionar_unidad(unidades_disponibles: list[str]) -> str:
+    st.sidebar.title("Configuración de unidad")
+    if len(unidades_disponibles) == 1:
+        unidad = unidades_disponibles[0]
+        st.sidebar.info(f"Unidad asignada: **{unidad}**")
+        return unidad
+    return st.sidebar.selectbox(
+        "Seleccione la unidad con la que quiere trabajar:",
+        unidades_disponibles,
     )
 
-    if finalizado_anexo1:
-        df_estado.loc[idx_estado, "anexo1_completo"] = True
-        guardar_estado(df_estado)
-        st.session_state["pantalla"] = "anexo2"
-        st.rerun()
 
+def run_operativos_verano_app(
+    allowed_units: list[str] | None = None,
+    configure_page: bool = True,
+) -> None:
+    if configure_page:
+        st.set_page_config(page_title=APP_TITLE, layout="wide")
 
-# -------------------------------------------------------------------
-# PANTALLA ANEXO II
-# -------------------------------------------------------------------
-if st.session_state["pantalla"] == "anexo2":
-    finalizado_anexo2 = mostrar_anexo_2(
-        ruta_excel=ANEXO2_PATH,
-        fecha_objetivo=fecha_objetivo,
-        fecha_default=fecha_default,
-    )
+    unidades_disponibles = _unidades_habilitadas(allowed_units)
 
-    if finalizado_anexo2:
-        df_estado.loc[idx_estado, "anexo2_completo"] = True
-        guardar_estado(df_estado)
+    # -------------------------------------------------------------------
+    # SESSION STATE
+    # -------------------------------------------------------------------
+    if "pantalla" not in st.session_state:
+        st.session_state["pantalla"] = "bienvenida"
 
-        # Día de los operativos que se cargaron en ANEXO 2 (fecha_objetivo - 1)
-        fecha_carga = fecha_objetivo - timedelta(days=1)
-        # Fecha objetivo siguiente
-        fecha_siguiente = fecha_objetivo + timedelta(days=1)
+    if "unidad_actual" not in st.session_state:
+        st.session_state["unidad_actual"] = None
 
-        if fecha_objetivo == hoy:
-            # Si la fecha objetivo ya es HOY, mostramos pantalla final
-            st.session_state["pantalla"] = "completo"
-        else:
-            # Si todavía quedan días por cargar, avisamos y pasamos al siguiente día
-            st.session_state["mensaje_cambio_dia"] = (
-                f"Unidad **{unidad_actual}**:\n\n"
-                "Se ha completado la carga de los operativos del día "
-                f"{fecha_carga.strftime('%d/%m/%Y')} y se pasará al día siguiente "
-                f"({fecha_siguiente.strftime('%d/%m/%Y')})."
-            )
+    unidad_seleccionada = _seleccionar_unidad(unidades_disponibles)
+    st.session_state["unidad_actual"] = unidad_seleccionada
+    unidad_actual = unidad_seleccionada
+
+    # -------------------------------------------------------------------
+    # LÓGICA PRINCIPAL
+    # -------------------------------------------------------------------
+    hoy = date.today()
+
+    # Si todavía no llegamos a la fecha de inicio, no se habilita la carga
+    if hoy < START_DATE:
+        st.title("BIENVENIDO AL SISTEMA DE CARGA OPERATIVOS VERANO")
+        st.subheader(f"Unidad: {unidad_actual}")
+        st.info(
+            "La planilla de carga de OPERATIVOS VERANO comenzará a utilizarse "
+            f"a partir del día {START_DATE.strftime('%d/%m/%Y')} ."
+        )
+        st.stop()
+
+    df_estado = cargar_estado()
+
+    # Buscar la primera fecha entre START_DATE y hoy cuya carga NO esté completa
+    # para la unidad_actual
+    fecha_objetivo = None
+    idx_estado = None
+
+    dia = START_DATE
+    while dia <= hoy:
+        df_estado, idx = asegurar_fila_estado(df_estado, dia, unidad_actual)
+        anexo1_completo = bool(df_estado.loc[idx, "anexo1_completo"])
+        anexo2_completo = bool(df_estado.loc[idx, "anexo2_completo"])
+
+        if not (anexo1_completo and anexo2_completo):
+            fecha_objetivo = dia
+            idx_estado = idx
+            break
+
+        dia += timedelta(days=1)
+
+    # Si fecha_objetivo sigue en None → esta unidad está al día hasta hoy
+    if fecha_objetivo is None:
+        st.title("BIENVENIDO AL SISTEMA DE CARGA OPERATIVOS VERANO")
+        st.subheader(f"Unidad: {unidad_actual}")
+        st.subheader("Estado de la carga")
+
+        ultima_fecha_operativos = hoy - timedelta(days=1)
+        st.success(
+            f"La unidad **{unidad_actual}** está al día con la carga de OPERATIVOS VERANO.\n\n"
+            f"La última fecha de operativos cargados es: "
+            f"{ultima_fecha_operativos.strftime('%d/%m/%Y')}.\n\n"
+            "ESPERE AL DÍA SIGUIENTE PARA CONTINUAR."
+        )
+        st.stop()
+
+    # A partir de acá trabajamos sobre la fecha_objetivo encontrada
+    fecha_default = fecha_inicio_por_defecto(hoy)
+    anexo1_completo = bool(df_estado.loc[idx_estado, "anexo1_completo"])
+    anexo2_completo = bool(df_estado.loc[idx_estado, "anexo2_completo"])
+
+    # Mensaje de cambio de día (si viene de la ejecución anterior)
+    mensaje_cambio = st.session_state.pop("mensaje_cambio_dia", None)
+    if mensaje_cambio:
+        st.success(mensaje_cambio)
+
+    # Pantalla inicial según estado para esa fecha_objetivo
+    if st.session_state["pantalla"] == "bienvenida":
+        if not anexo1_completo:
+            st.session_state["pantalla"] = "anexo1"
+        elif anexo1_completo and not anexo2_completo:
+            st.session_state["pantalla"] = "anexo2"
+
+    # -------------------------------------------------------------------
+    # PANTALLA ANEXO I
+    # -------------------------------------------------------------------
+    if st.session_state["pantalla"] == "anexo1":
+        # ruta_excel se ignora dentro de mostrar_anexo1 (usa archivos por unidad),
+        # pero se mantiene el parámetro para compatibilidad
+        finalizado_anexo1 = mostrar_anexo1(
+            ruta_excel=ANEXO1_PATH,
+            fecha_objetivo=fecha_objetivo,
+            fecha_default=fecha_default,
+        )
+
+        if finalizado_anexo1:
+            df_estado.loc[idx_estado, "anexo1_completo"] = True
+            guardar_estado(df_estado)
+            st.success("ANEXO I COMPLETO")
+            st.session_state["pantalla"] = "anexo2"
+            st.rerun()
+
+        st.stop()
+
+    # -------------------------------------------------------------------
+    # PANTALLA ANEXO II
+    # -------------------------------------------------------------------
+    if st.session_state["pantalla"] == "anexo2":
+        finalizado_anexo2 = mostrar_anexo_2(
+            ruta_excel=ANEXO2_PATH,
+            fecha_objetivo=fecha_objetivo,
+            fecha_default=fecha_default,
+        )
+
+        if finalizado_anexo2:
+            df_estado.loc[idx_estado, "anexo2_completo"] = True
+            guardar_estado(df_estado)
+            st.success("ANEXO II COMPLETO")
+
+            # Buscar siguiente día con carga pendiente (si hay)
+            dia = fecha_objetivo + timedelta(days=1)
+            prox_fecha = None
+            while dia <= hoy:
+                df_estado, idx = asegurar_fila_estado(df_estado, dia, unidad_actual)
+                anexo1_completo = bool(df_estado.loc[idx, "anexo1_completo"])
+                anexo2_completo = bool(df_estado.loc[idx, "anexo2_completo"])
+                if not (anexo1_completo and anexo2_completo):
+                    prox_fecha = dia
+                    break
+                dia += timedelta(days=1)
+
+            if prox_fecha:
+                st.session_state["mensaje_cambio_dia"] = (
+                    f"Se completó la carga del día {fecha_objetivo.strftime('%d/%m/%Y')} "
+                    f"para la unidad {unidad_actual}. Ahora puede continuar con el día "
+                    f"{prox_fecha.strftime('%d/%m/%Y')}"
+                )
+            else:
+                st.session_state["mensaje_cambio_dia"] = (
+                    f"La unidad {unidad_actual} está al día hasta el {fecha_objetivo.strftime('%d/%m/%Y')}. "
+                    "ESPERE AL DÍA SIGUIENTE PARA CONTINUAR."
+                )
+
             st.session_state["pantalla"] = "bienvenida"
+            st.rerun()
 
-        st.rerun()
+        st.stop()
 
 
-# -------------------------------------------------------------------
-# PANTALLA FINAL
-# -------------------------------------------------------------------
-if st.session_state["pantalla"] == "completo":
-    # Día de los operativos que se cargaron en ANEXO 2
-    fecha_carga = fecha_objetivo - timedelta(days=1)
-
-    st.title("BIENVENIDO AL SISTEMA DE CARGA OPERATIVOS VERANO")
-    st.subheader(f"Unidad: {unidad_actual}")
-    st.subheader("Carga finalizada")
-
-    st.success(
-        f"Ha completado la carga de los operativos de la fecha "
-        f"{fecha_carga.strftime('%d/%m/%Y')} para la unidad **{unidad_actual}**."
-    )
-    st.info(
-        "USTED ESTÁ AL DÍA CON LA CARGA PARA ESA FECHA.\n\n"
-        "ESPERE AL DÍA SIGUIENTE PARA REALIZAR UNA NUEVA CARGA."
-    )
+if __name__ == "__main__":
+    run_operativos_verano_app(configure_page=True)

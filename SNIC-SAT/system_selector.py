@@ -9,7 +9,13 @@ AVAILABLE_SYSTEMS = [
         "label": "Planillas SNIC-SAT.",
         "description": "Ingreso y administración de planillas.",
         "icon": "🗂️",
-    }
+    },
+    {
+        "id": "operativos-verano",
+        "label": "Planillas Operativo Verano",
+        "description": "Carga de Operativos Verano DSICCO.",
+        "icon": "🌞",
+    },
 ]
 
 
@@ -27,7 +33,11 @@ def render_system_selector() -> None:
             st.session_state.clear()
             st.rerun()
 
+    allowed_systems = st.session_state.get("allowed_systems")
+
     for system in AVAILABLE_SYSTEMS:
+        if allowed_systems and system.get("id") not in allowed_systems:
+            continue
         with st.container():
             st.caption(system.get("description", ""))
             if st.button(

@@ -10,36 +10,51 @@ COMISARIA_OPTIONS = [
     "Comisaria 42",
     "Comisaria 9",
     "CENAF 4",
+    "DTCCO-PH",
 ]
+
+DEFAULT_SYSTEMS = ["snic-sat"]
 
 USERS = {
     "Gaston": {
         "password": "10Capo555",
         "comisarias": COMISARIA_OPTIONS,
+        "systems": ["snic-sat", "operativos-verano"],
     },
     "comisaria14": {
         "password": "comisaria14@",
         "comisarias": ["Comisaria 14"],
+        "systems": DEFAULT_SYSTEMS,
     },
     "comisaria6": {
         "password": "comisaria6@",
         "comisarias": ["Comisaria 6"],
+        "systems": DEFAULT_SYSTEMS,
     },
     "comisaria15": {
         "password": "comisaria15@",
         "comisarias": ["Comisaria 15"],
+        "systems": DEFAULT_SYSTEMS,
     },
-    "comiaria9": {
+    "comisaria9": {
         "password": "comisaria9@",
         "comisarias": ["Comisaria 9"],
+        "systems": ["snic-sat", "operativos-verano"],
     },
     "comiariacenaf": {
         "password": "comisariacenaf@",
         "comisarias": ["CENAF 4"],
+        "systems": DEFAULT_SYSTEMS,
     },
-    "comiaria42": {
+    "comisaria42": {
         "password": "comisaria42@",
         "comisarias": ["Comisaria 42"],
+        "systems": ["snic-sat", "operativos-verano"],
+    },
+    "DTCCO-PH": {
+        "password": "DTCCO-PH@",
+        "comisarias": ["DTCCO-PH"],
+        "systems": ["operativos-verano"],
     },
 }
 
@@ -70,10 +85,12 @@ def render_login() -> None:
         user_data = USERS.get(username)
         if user_data and password_input == user_data.get("password"):
             allowed = list(user_data.get("comisarias", []))
+            systems = list(user_data.get("systems") or DEFAULT_SYSTEMS)
             st.session_state.clear()
             st.session_state.authenticated = True
             st.session_state.username = username
             st.session_state.allowed_comisarias = allowed
+            st.session_state.allowed_systems = systems
             st.session_state.step = 1
             st.session_state.selected_system = None
             st.rerun()

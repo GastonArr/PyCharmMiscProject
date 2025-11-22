@@ -1,6 +1,8 @@
 import streamlit as st
 import datetime
 import os
+import sys
+from pathlib import Path
 import direcciones          # módulo externo para pantalla de direcciones streamlit run app.py
 import Robos_Hurtos         # subflujo para delitos Robos/Hurtos
 import otros                # subflujo para Lesiones / Desaparición
@@ -17,6 +19,18 @@ from login import render_login, render_user_header
 from system_selector import AVAILABLE_SYSTEMS, render_system_selector
 
 SYSTEM_SNICSAT_ID = "snic-sat"
+SYSTEM_OPERATIVOS_VERANO_ID = "operativos-verano"
+OPERATIVOS_UNIDAD_MAP = {
+    "Comisaria 9": "comisaria 9",
+    "Comisaria 42": "comisaria 42",
+    "DTCCO-PH": "DTCCO-PH",
+}
+
+st.set_page_config(page_title="Panel de sistemas DSICCO", layout="wide")
+
+_OPERATIVOS_DIR = Path(__file__).resolve().parent.parent / "OPERATIVOS-VERANO-2026"
+if str(_OPERATIVOS_DIR) not in sys.path:
+    sys.path.insert(0, str(_OPERATIVOS_DIR))
 
 # ===========================
 # Config remota (bucket)
@@ -153,6 +167,7 @@ def _init_state():
     d.setdefault("authenticated", False)
     d.setdefault("username", None)
     d.setdefault("allowed_comisarias", None)
+    d.setdefault("allowed_systems", None)
     d.setdefault("selected_system", None)
     d.setdefault("selected_system_label", None)
     d.setdefault("step", 1)
@@ -188,6 +203,23 @@ def _ensure_system_label() -> None:
                 st.session_state.selected_system_label = system.get("label")
                 break
 
+
+def _render_operativos_verano() -> None:
+    allowed_units = []
+    for unidad in st.session_state.allowed_comisarias or []:
+        mapped = OPERATIVOS_UNIDAD_MAP.get(unidad)
+        if mapped:
+            allowed_units.append(mapped)
+
+    if not allowed_units:
+        st.error("Su usuario no tiene unidades habilitadas para Operativos Verano. Contacte al administrador del sistema.")
+        return
+
+    from operativos_verano_app import run_operativos_verano_app
+
+    render_user_header()
+    run_operativos_verano_app(allowed_units=allowed_units, configure_page=False)
+
 # Bloquear acceso si no está autenticado
 if not st.session_state.authenticated:
     render_login()
@@ -197,6 +229,10 @@ _ensure_system_label()
 
 if not st.session_state.get("selected_system"):
     render_system_selector()
+    st.stop()
+
+if st.session_state.selected_system == SYSTEM_OPERATIVOS_VERANO_ID:
+    _render_operativos_verano()
     st.stop()
 
 if st.session_state.selected_system != SYSTEM_SNICSAT_ID:
