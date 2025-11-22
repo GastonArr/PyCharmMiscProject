@@ -385,8 +385,9 @@ if st.session_state.step == 2:
         info_delito = delitos_pendientes.get(slot_id, {})
         restantes = info_delito.get("restantes", 0)
         planificados = info_delito.get("plan", 0)
-        etiqueta = info_delito.get("display") or info_delito.get("nombre") or slot_id
-        return f"{etiqueta.strip()} — restantes {restantes} de {planificados}"
+        etiqueta_raw = info_delito.get("display") or info_delito.get("nombre") or slot_id
+        etiqueta = (etiqueta_raw or "").strip() or slot_id
+        return f"{etiqueta} — restantes {restantes} de {planificados}"
 
     delito_slot_state = st.session_state.get("delito_slot_id")
     if delito_slot_state in opciones_delito:
@@ -403,7 +404,8 @@ if st.session_state.step == 2:
     st.caption("Solo se muestran los delitos asignados por el administrador para el día elegido.")
 
     info_delito_sel = delitos_pendientes.get(delito, {})
-    delito_nombre = (info_delito_sel.get("nombre") or "").strip() or delito
+    delito_nombre_raw = info_delito_sel.get("nombre")
+    delito_nombre = delito_nombre_raw or delito
     preventivo_asignado = (info_delito_sel.get("preventivo") or "").strip()
     preventivo_fijo = bool(preventivo_asignado)
     preventivo_valor = preventivo_asignado or (st.session_state.preventivo or "")
