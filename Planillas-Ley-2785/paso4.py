@@ -15,8 +15,18 @@ def render_paso4(
     build_form_data_from_state,
     save_to_excel,
     reset_form,
+    agenda_context=None,
 ):
     st.subheader("Paso 4: Datos del agresor y observaciones")
+
+    referencia = ""
+    if isinstance(agenda_context, dict):
+        referencia = agenda_context.get("referencia") or ""
+    if referencia:
+        st.info(
+            f"Referencia del hecho (Información específica AI): {referencia}",
+            icon="🗂️",
+        )
 
     cols = st.columns(3)
     with cols[0]:
@@ -66,6 +76,13 @@ def render_paso4(
         try:
             num, archivo = save_to_excel(unidad, data)
             st.success(f"Registro guardado con Nº {num}\nArchivo: {archivo}")
+            if isinstance(agenda_context, dict) and agenda_context.get("registrar"):
+                registrar = agenda_context.get("registrar")
+                fecha = agenda_context.get("fecha")
+                hecho_id = agenda_context.get("hecho_id")
+                ok_agenda, msg_agenda, _ = registrar(unidad, fecha, hecho_id)
+                if not ok_agenda:
+                    st.warning(msg_agenda or "No se pudo actualizar el almanaque del día.")
             reset_form()
             st.rerun()
         except Exception as e:

@@ -18,6 +18,12 @@ from gcs_utils import (
     save_workbook_to_gcs,
     upload_blob_bytes,
 )
+from agenda_ley_2785 import (
+    registrar_carga_hecho,
+    render_admin_agenda,
+    render_selector_agenda,
+    render_selector_unidad,
+)
 
 from paso1 import render_paso1
 from paso2 import render_paso2
@@ -461,6 +467,21 @@ def reset_form():
     st.session_state.step = 1
 
 
+def _referencia_banner(etiqueta_hecho: str, referencia: str | None) -> None:
+    ref = referencia.strip() if isinstance(referencia, str) else ""
+    titulo = etiqueta_hecho or "Hecho asignado"
+    if ref:
+        st.info(
+            f"{titulo}\n\nInformación específica (AI): {ref}",
+            icon="🗂️",
+        )
+    else:
+        st.warning(
+            f"{titulo}\n\nSin referencia de 'Información específica (AI)'.",
+            icon="ℹ️",
+        )
+
+
 def _allowed_units(unidades):
     if not unidades:
         return UNIDADES_JURISDICCION
@@ -481,6 +502,7 @@ def run_planillas_ley_2785_app(allowed_units=None, configure_page=True, is_admin
 
     if is_admin:
         render_admin_download(unidades)
+        render_admin_agenda(st.session_state.get("username"), unidades)
 
     if "step" not in st.session_state:
         st.session_state.step = 1
@@ -489,9 +511,64 @@ def run_planillas_ley_2785_app(allowed_units=None, configure_page=True, is_admin
 
     st.title("Carga de registros - Ley 2785")
 
+    unidad_sel = render_selector_unidad(unidades)
+    fecha_agenda, hechos_pendientes, mensaje_agenda = render_selector_agenda(unidad_sel)
+
+    if mensaje_agenda:
+        if str(mensaje_agenda).startswith("¡Felicitaciones!"):
+            st.success(mensaje_agenda)
+        else:
+            st.warning(mensaje_agenda)
+        if not fecha_agenda:
+            return
+
+    if not fecha_agenda or not hechos_pendientes:
+        st.info("No hay hechos planificados para continuar con la carga.")
+        return
+
+    hechos_ids = list(hechos_pendientes.keys())
+    default_hecho = st.session_state.get("agenda_planillas_hecho")
+    if default_hecho not in hechos_ids:
+        default_hecho = hechos_ids[0]
+
+    def _format_hecho(hecho_id):
+        info = hechos_pendientes.get(hecho_id, {})
+        return info.get("display") or info.get("etiqueta") or hecho_id
+
+    hecho_sel = st.selectbox(
+        "Seleccione el hecho asignado",
+        options=hechos_ids,
+        format_func=_format_hecho,
+        index=hechos_ids.index(default_hecho),
+        key="agenda_planillas_hecho",
+    )
+
+    info_hecho = hechos_pendientes.get(hecho_sel, {})
+    referencia_actual = info_hecho.get("referencia") or ""
+    etiqueta_hecho = info_hecho.get("display") or info_hecho.get("etiqueta") or "Hecho asignado"
+
+    if st.session_state.get("agenda_planillas_hecho_prev") != hecho_sel:
+        st.session_state.step = 1
+    st.session_state["agenda_planillas_hecho_prev"] = hecho_sel
+
+    st.session_state["info_especifica"] = referencia_actual
+    st.session_state["agenda_planillas_etiqueta"] = etiqueta_hecho
+    st.session_state["agenda_planillas_fecha"] = fecha_agenda
+    st.session_state["institucion"] = unidad_sel
+
+    _referencia_banner(etiqueta_hecho, referencia_actual)
+
     steps_total = 4
     st.progress(st.session_state.step / steps_total)
     st.caption(f"Paso {st.session_state.step} de {steps_total}")
+
+    agenda_context = {
+        "fecha": fecha_agenda,
+        "hecho_id": hecho_sel,
+        "unidad": unidad_sel,
+        "referencia": referencia_actual,
+        "registrar": registrar_carga_hecho,
+    }
 
     if st.session_state.step == 1:
         render_paso1(unidades, DOCUMENTO_OPTIONS)
@@ -531,6 +608,7 @@ def run_planillas_ley_2785_app(allowed_units=None, configure_page=True, is_admin
             build_form_data_from_state,
             save_to_excel,
             reset_form,
+            agenda_context,
         )
 
     st.markdown("---")
