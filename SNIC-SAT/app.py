@@ -289,28 +289,6 @@ usuario_es_admin = agenda_delitos.es_admin(
 if st.session_state.comisaria not in allowed_comisarias:
     st.session_state.comisaria = allowed_comisarias[0]
 
-if usuario_es_admin and len(allowed_comisarias) > 1:
-    seleccion = st.selectbox(
-        "Seleccione la comisaría a cargar",
-        options=allowed_comisarias,
-        index=allowed_comisarias.index(st.session_state.comisaria),
-        help="Afecta al almanaque y a las descargas de Excel.",
-    )
-    if seleccion != st.session_state.comisaria:
-        st.session_state.comisaria = seleccion
-        st.session_state.step = 1
-        st.rerun()
-
-comisaria_actual = st.session_state.comisaria
-excel_path_preview, fila_objetivo, planilla_llena, excel_bytes = _prepare_excel_context(
-    comisaria_actual,
-    st.session_state.excel_refresh_token,
-)
-
-st.session_state.excel_path = excel_path_preview
-st.session_state.fila = fila_objetivo
-st.session_state.planilla_llena = planilla_llena
-
 render_user_header()
 
 # ---------------------------
@@ -332,6 +310,38 @@ if st.session_state.step == 1:
 
     st.session_state.step = 2
     st.rerun()
+
+# Panel de administración del almanaque (solo usuarios habilitados)
+agenda_delitos.render_admin_agenda(st.session_state.username, allowed_comisarias)
+
+st.markdown(
+    "<hr style='border: 4px solid #444; margin: 1.5rem 0 1rem;' />",
+    unsafe_allow_html=True,
+)
+
+st.markdown("#### Seleccione la comisaría y gestione el Excel")
+
+if usuario_es_admin and len(allowed_comisarias) > 1:
+    seleccion = st.selectbox(
+        "Seleccione la comisaría a cargar",
+        options=allowed_comisarias,
+        index=allowed_comisarias.index(st.session_state.comisaria),
+        help="Afecta al almanaque y a las descargas de Excel.",
+    )
+    if seleccion != st.session_state.comisaria:
+        st.session_state.comisaria = seleccion
+        st.session_state.step = 1
+        st.rerun()
+
+comisaria_actual = st.session_state.comisaria
+excel_path_preview, fila_objetivo, planilla_llena, excel_bytes = _prepare_excel_context(
+    comisaria_actual,
+    st.session_state.excel_refresh_token,
+)
+
+st.session_state.excel_path = excel_path_preview
+st.session_state.fila = fila_objetivo
+st.session_state.planilla_llena = planilla_llena
 
 # --- Botón Descargar Excel + Uploader con validación de nombre ---
 st.caption("Usted puede descargar las SNIC que va cargando.")
@@ -382,9 +392,6 @@ if usuario_es_admin:
                     _invalidate_excel_caches()
                 except Exception as e:
                     st.error(f"No se pudo guardar el archivo en el bucket: {e}")
-
-# Panel de administración del almanaque (solo usuarios habilitados)
-agenda_delitos.render_admin_agenda(st.session_state.username, allowed_comisarias)
 
 if st.session_state.step == 2:
     if st.session_state.planilla_llena:
