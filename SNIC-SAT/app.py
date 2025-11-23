@@ -293,6 +293,10 @@ def _render_planillas_ley_2785() -> None:
     from main import run_planillas_ley_2785_app
 
     allowed_units = _planillas_ley_2785_allowed_units()
+    usuario_es_admin = agenda_delitos.es_admin(
+        st.session_state.username,
+        st.session_state.allowed_comisarias,
+    )
     if not allowed_units:
         st.error(
             "Su usuario no tiene unidades habilitadas para Planillas Ley 2785. Contacte al administrador del sistema."
@@ -300,7 +304,11 @@ def _render_planillas_ley_2785() -> None:
         return
 
     render_user_header()
-    run_planillas_ley_2785_app(allowed_units=allowed_units, configure_page=False)
+    run_planillas_ley_2785_app(
+        allowed_units=allowed_units,
+        configure_page=False,
+        is_admin=usuario_es_admin,
+    )
 
 # Bloquear acceso si no está autenticado
 if not st.session_state.authenticated:

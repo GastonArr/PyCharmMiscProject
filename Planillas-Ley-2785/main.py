@@ -1,10 +1,23 @@
 import datetime as dt
-import os
-import shutil
+import sys
+from pathlib import Path
 
 import streamlit as st
-from openpyxl import load_workbook
 from openpyxl.utils import column_index_from_string
+
+_PLANILLAS_DIR = Path(__file__).resolve().parent
+_SNICSAT_DIR = _PLANILLAS_DIR.parent / "SNIC-SAT"
+if str(_SNICSAT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SNICSAT_DIR))
+
+from gcs_utils import (
+    blob_exists,
+    download_blob_bytes,
+    load_workbook_from_gcs,
+    resolve_excel_blob,
+    save_workbook_to_gcs,
+    upload_blob_bytes,
+)
 
 from paso1 import render_paso1
 from paso2 import render_paso2
@@ -26,23 +39,19 @@ def _configure_page() -> None:
     _PAGE_CONFIGURED = True
 
 
-# Carpeta donde van TODOS los Excel (plantilla + archivos por unidad)
-EXCEL_FOLDER = "Excel-2785"
-if not os.path.exists(EXCEL_FOLDER):
-    os.makedirs(EXCEL_FOLDER)
-
-# La plantilla también va dentro de la carpeta
-TEMPLATE_FILE = os.path.join(EXCEL_FOLDER, "PLANILLA LEY 2785 NUEVA.xlsx")
+# Rutas en Cloud Storage
+BLOB_PREFIX = "planillas-ley-2785"
+TEMPLATE_BASE = f"{BLOB_PREFIX}/plantilla/PLANILLA LEY 2785 NUEVA"
 EXCEL_SHEET_NAME = "LEY 2785"
 
-# Mapear unidad -> archivo Excel de salida (dentro de Excel-2785/)
+# Mapear unidad -> archivo Excel de salida en el bucket
 UNIT_FILE_MAP = {
-    "Comisaría 6°": os.path.join(EXCEL_FOLDER, "LEY-2785-COMISARIA6.xlsx"),
-    "Comisaría 9°": os.path.join(EXCEL_FOLDER, "LEY-2785-COMISARIA9.xlsx"),
-    "Comisaría 14°": os.path.join(EXCEL_FOLDER, "LEY-2785-COMISARIA14.xlsx"),
-    "Comisaría 15°": os.path.join(EXCEL_FOLDER, "LEY-2785-COMISARIA15.xlsx"),
-    "Comisaría 42°": os.path.join(EXCEL_FOLDER, "LEY-2785-COMISARIA42.xlsx"),
-    "CNAF 4": os.path.join(EXCEL_FOLDER, "LEY-2785-CNAF-4.xlsx"),
+    "Comisaría 6°": f"{BLOB_PREFIX}/LEY-2785-COMISARIA6.xlsx",
+    "Comisaría 9°": f"{BLOB_PREFIX}/LEY-2785-COMISARIA9.xlsx",
+    "Comisaría 14°": f"{BLOB_PREFIX}/LEY-2785-COMISARIA14.xlsx",
+    "Comisaría 15°": f"{BLOB_PREFIX}/LEY-2785-COMISARIA15.xlsx",
+    "Comisaría 42°": f"{BLOB_PREFIX}/LEY-2785-COMISARIA42.xlsx",
+    "CNAF 4": f"{BLOB_PREFIX}/LEY-2785-CNAF-4.xlsx",
 }
 UNIDADES_JURISDICCION = list(UNIT_FILE_MAP.keys())
 
@@ -358,14 +367,16 @@ def ensure_unit_file_exists(unidad):
 
     target = UNIT_FILE_MAP[unidad]
 
-    if not os.path.exists(TEMPLATE_FILE):
+    template_blob = resolve_excel_blob(TEMPLATE_BASE)
+    template_bytes = download_blob_bytes(template_blob)
+    if template_bytes is None:
         raise FileNotFoundError(
-            f"No se encontró la plantilla base '{TEMPLATE_FILE}'. "
-            f"Guardala con ese nombre dentro de la carpeta '{EXCEL_FOLDER}'."
+            "No se encontró la plantilla base en el almacenamiento. "
+            f"Verificá que exista el blob '{template_blob}'."
         )
 
-    if not os.path.exists(target):
-        shutil.copyfile(TEMPLATE_FILE, target)
+    if not blob_exists(target):
+        upload_blob_bytes(target, template_bytes)
 
     return target
 
@@ -389,9 +400,7 @@ def get_next_row_and_counter(ws):
 
 def save_to_excel(unidad, data):
     target = ensure_unit_file_exists(unidad)
-    keep_vba = target.lower().endswith(".xlsm")
-
-    wb = load_workbook(target, keep_vba=keep_vba)
+    wb = load_workbook_from_gcs(target)
     if EXCEL_SHEET_NAME not in wb.sheetnames:
         raise ValueError(
             f"La hoja '{EXCEL_SHEET_NAME}' no existe en el archivo {target}."
@@ -405,9 +414,45 @@ def save_to_excel(unidad, data):
     for k, col in COLUMN_MAPPING.items():
         idx = column_index_from_string(col)
         ws.cell(row=row, column=idx).value = data.get(k)
-
-    wb.save(target)
+    save_workbook_to_gcs(wb, target)
     return counter, target
+
+
+def render_admin_download(unidades):
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Descarga de planillas")
+
+    try:
+        default_idx = unidades.index(st.session_state.get("institucion", unidades[0]))
+    except ValueError:
+        default_idx = 0
+
+    unidad_descarga = st.sidebar.selectbox(
+        "Seleccione la comisaría",
+        unidades,
+        index=default_idx,
+        key="unidad_descarga_admin",
+    )
+
+    try:
+        blob_name = ensure_unit_file_exists(unidad_descarga)
+    except FileNotFoundError as exc:
+        st.sidebar.error(str(exc))
+        return
+
+    data = download_blob_bytes(blob_name)
+    if not data:
+        st.sidebar.warning(
+            "No se pudo obtener la planilla seleccionada desde el almacenamiento en la nube."
+        )
+        return
+
+    st.sidebar.download_button(
+        "Descargar planilla de la comisaría seleccionada",
+        data=data,
+        file_name=Path(blob_name).name,
+        use_container_width=True,
+    )
 
 
 def reset_form():
@@ -423,7 +468,7 @@ def _allowed_units(unidades):
     return filtered
 
 
-def run_planillas_ley_2785_app(allowed_units=None, configure_page=True):
+def run_planillas_ley_2785_app(allowed_units=None, configure_page=True, is_admin=False):
     if configure_page:
         _configure_page()
 
@@ -433,6 +478,9 @@ def run_planillas_ley_2785_app(allowed_units=None, configure_page=True):
             "No cuenta con unidades habilitadas para cargar planillas Ley 2785."
         )
         return
+
+    if is_admin:
+        render_admin_download(unidades)
 
     if "step" not in st.session_state:
         st.session_state.step = 1
