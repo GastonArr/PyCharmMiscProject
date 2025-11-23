@@ -16,6 +16,12 @@ AVAILABLE_SYSTEMS = [
         "description": "Carga de Operativos Verano DSICCO.",
         "icon": "🌞",
     },
+    {
+        "id": "planillas-ley-2785",
+        "label": "Planillas Ley 2785",
+        "description": "Carga de planillas LEY 2785 por unidad habilitada.",
+        "icon": "📄",
+    },
 ]
 
 

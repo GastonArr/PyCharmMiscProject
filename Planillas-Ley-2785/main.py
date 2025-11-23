@@ -1,6 +1,6 @@
+import datetime as dt
 import os
 import shutil
-import datetime as dt
 
 import streamlit as st
 from openpyxl import load_workbook
@@ -15,7 +15,16 @@ from paso4 import render_paso4
 # CONFIGURACIÓN BÁSICA
 # ==========================
 
-st.set_page_config(page_title="Carga LEY 2785", layout="wide")
+_PAGE_CONFIGURED = False
+
+
+def _configure_page() -> None:
+    global _PAGE_CONFIGURED
+    if _PAGE_CONFIGURED:
+        return
+    st.set_page_config(page_title="Carga LEY 2785", layout="wide")
+    _PAGE_CONFIGURED = True
+
 
 # Carpeta donde van TODOS los Excel (plantilla + archivos por unidad)
 EXCEL_FOLDER = "Excel-2785"
@@ -407,94 +416,100 @@ def reset_form():
     st.session_state.step = 1
 
 
-# ==========================
-# ESTADO INICIAL
-# ==========================
+def _allowed_units(unidades):
+    if not unidades:
+        return UNIDADES_JURISDICCION
+    filtered = [u for u in unidades if u in UNIDADES_JURISDICCION]
+    return filtered
 
-if "step" not in st.session_state:
-    st.session_state.step = 1
 
-initialize_default_state()
+def run_planillas_ley_2785_app(allowed_units=None, configure_page=True):
+    if configure_page:
+        _configure_page()
 
-# ==========================
-# UI GENERAL
-# ==========================
+    unidades = _allowed_units(allowed_units)
+    if not unidades:
+        st.error(
+            "No cuenta con unidades habilitadas para cargar planillas Ley 2785."
+        )
+        return
 
-st.title("Carga de registros - Ley 2785")
+    if "step" not in st.session_state:
+        st.session_state.step = 1
 
-steps_total = 4
-st.progress(st.session_state.step / steps_total)
-st.caption(f"Paso {st.session_state.step} de {steps_total}")
+    initialize_default_state()
 
-# ==========================
-# RENDERS POR PASO
-# ==========================
+    st.title("Carga de registros - Ley 2785")
 
-if st.session_state.step == 1:
-    render_paso1(UNIDADES_JURISDICCION, DOCUMENTO_OPTIONS)
+    steps_total = 4
+    st.progress(st.session_state.step / steps_total)
+    st.caption(f"Paso {st.session_state.step} de {steps_total}")
 
-elif st.session_state.step == 2:
-    render_paso2(
-        SEXO1_OPTIONS,
-        TRANS1_OPTIONS,
-        EDUCACION1_OPTIONS,
-        COMPLITUD1_OPTIONS,
-        OCUPADA1_OPTIONS,
-        ACTIVIDAD1_OPTIONS,
-    )
+    if st.session_state.step == 1:
+        render_paso1(unidades, DOCUMENTO_OPTIONS)
 
-elif st.session_state.step == 3:
-    render_paso3(
-        VINCULO_OPTIONS,
-        CONVIVENCIA_OPTIONS,
-        TIPO_OPTIONS,
-        MODALIDAD_OPTIONS,
-        TIEMPO_OPTIONS,
-        FRECUENCIA_OPTIONS,
-    )
+    elif st.session_state.step == 2:
+        render_paso2(
+            SEXO1_OPTIONS,
+            TRANS1_OPTIONS,
+            EDUCACION1_OPTIONS,
+            COMPLITUD1_OPTIONS,
+            OCUPADA1_OPTIONS,
+            ACTIVIDAD1_OPTIONS,
+        )
 
-elif st.session_state.step == 4:
-    render_paso4(
-        SEXO2_OPTIONS,
-        TRANS2_OPTIONS,
-        EDUCACION2_OPTIONS,
-        COMPLITUD2_OPTIONS,
-        ACTIVIDAD2_OPTIONS,
-        OTRA2_OPTIONS,
-        STEP_REQUIRED,
-        REQUIRED_FIELDS,
-        FIELD_LABELS,
-        find_missing_in_state,
-        build_form_data_from_state,
-        save_to_excel,
-        reset_form,
-    )
+    elif st.session_state.step == 3:
+        render_paso3(
+            VINCULO_OPTIONS,
+            CONVIVENCIA_OPTIONS,
+            TIPO_OPTIONS,
+            MODALIDAD_OPTIONS,
+            TIEMPO_OPTIONS,
+            FRECUENCIA_OPTIONS,
+        )
 
-# ==========================
-# NAVEGACIÓN
-# ==========================
+    elif st.session_state.step == 4:
+        render_paso4(
+            SEXO2_OPTIONS,
+            TRANS2_OPTIONS,
+            EDUCACION2_OPTIONS,
+            COMPLITUD2_OPTIONS,
+            ACTIVIDAD2_OPTIONS,
+            OTRA2_OPTIONS,
+            STEP_REQUIRED,
+            REQUIRED_FIELDS,
+            FIELD_LABELS,
+            find_missing_in_state,
+            build_form_data_from_state,
+            save_to_excel,
+            reset_form,
+        )
 
-st.markdown("---")
-col1, _, col3 = st.columns(3)
+    st.markdown("---")
+    col1, _, col3 = st.columns(3)
 
-with col1:
-    if st.session_state.step > 1:
-        if st.button("⬅ Anterior"):
-            st.session_state.step -= 1
-            st.rerun()
-
-with col3:
-    if st.session_state.step < steps_total:
-        if st.button("Siguiente ➡"):
-            required = STEP_REQUIRED[st.session_state.step]
-            missing = find_missing_in_state(required)
-
-            if missing:
-                labels = [FIELD_LABELS[k] for k in missing]
-                st.error(
-                    "Para continuar, completá los siguientes campos:\n\n- "
-                    + "\n- ".join(labels)
-                )
-            else:
-                st.session_state.step += 1
+    with col1:
+        if st.session_state.step > 1:
+            if st.button("⬅ Anterior"):
+                st.session_state.step -= 1
                 st.rerun()
+
+    with col3:
+        if st.session_state.step < steps_total:
+            if st.button("Siguiente ➡"):
+                required = STEP_REQUIRED[st.session_state.step]
+                missing = find_missing_in_state(required)
+
+                if missing:
+                    labels = [FIELD_LABELS[k] for k in missing]
+                    st.error(
+                        "Para continuar, completá los siguientes campos:\n\n- "
+                        + "\n- ".join(labels)
+                    )
+                else:
+                    st.session_state.step += 1
+                    st.rerun()
+
+
+if __name__ == "__main__":
+    run_planillas_ley_2785_app()

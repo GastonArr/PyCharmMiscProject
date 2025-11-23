@@ -20,10 +20,19 @@ from system_selector import AVAILABLE_SYSTEMS, render_system_selector
 
 SYSTEM_SNICSAT_ID = "snic-sat"
 SYSTEM_OPERATIVOS_VERANO_ID = "operativos-verano"
+SYSTEM_PLANILLAS_2785_ID = "planillas-ley-2785"
 OPERATIVOS_UNIDAD_MAP = {
     "Comisaria 9": "comisaria 9",
     "Comisaria 42": "comisaria 42",
     "DTCCO-PH": "DTCCO-PH",
+}
+PLANILLAS_UNIDAD_MAP = {
+    "Comisaria 6": "Comisaría 6°",
+    "Comisaria 9": "Comisaría 9°",
+    "Comisaria 14": "Comisaría 14°",
+    "Comisaria 15": "Comisaría 15°",
+    "Comisaria 42": "Comisaría 42°",
+    "CENAF 4": "CNAF 4",
 }
 
 st.set_page_config(page_title="Panel de sistemas DSICCO", layout="wide")
@@ -31,6 +40,9 @@ st.set_page_config(page_title="Panel de sistemas DSICCO", layout="wide")
 _OPERATIVOS_DIR = Path(__file__).resolve().parent.parent / "OPERATIVOS-VERANO-2026"
 if str(_OPERATIVOS_DIR) not in sys.path:
     sys.path.insert(0, str(_OPERATIVOS_DIR))
+_PLANILLAS_2785_DIR = Path(__file__).resolve().parent.parent / "Planillas-Ley-2785"
+if str(_PLANILLAS_2785_DIR) not in sys.path:
+    sys.path.insert(0, str(_PLANILLAS_2785_DIR))
 
 # ===========================
 # Config remota (bucket)
@@ -256,6 +268,40 @@ def _render_operativos_verano() -> None:
     render_user_header()
     run_operativos_verano_app(allowed_units=allowed_units, configure_page=False)
 
+
+def _planillas_ley_2785_allowed_units() -> list[str]:
+    allowed_units = []
+    for comisaria in st.session_state.allowed_comisarias or []:
+        mapped = PLANILLAS_UNIDAD_MAP.get(comisaria)
+        if mapped:
+            allowed_units.append(mapped)
+
+    usuario_es_admin = agenda_delitos.es_admin(
+        st.session_state.username,
+        st.session_state.allowed_comisarias,
+    )
+
+    if usuario_es_admin:
+        from main import UNIDADES_JURISDICCION as PLANILLAS_UNIDADES_JURISDICCION
+
+        return list(PLANILLAS_UNIDADES_JURISDICCION)
+
+    return allowed_units
+
+
+def _render_planillas_ley_2785() -> None:
+    from main import run_planillas_ley_2785_app
+
+    allowed_units = _planillas_ley_2785_allowed_units()
+    if not allowed_units:
+        st.error(
+            "Su usuario no tiene unidades habilitadas para Planillas Ley 2785. Contacte al administrador del sistema."
+        )
+        return
+
+    render_user_header()
+    run_planillas_ley_2785_app(allowed_units=allowed_units, configure_page=False)
+
 # Bloquear acceso si no está autenticado
 if not st.session_state.authenticated:
     render_login()
@@ -269,6 +315,10 @@ if not st.session_state.get("selected_system"):
 
 if st.session_state.selected_system == SYSTEM_OPERATIVOS_VERANO_ID:
     _render_operativos_verano()
+    st.stop()
+
+if st.session_state.selected_system == SYSTEM_PLANILLAS_2785_ID:
+    _render_planillas_ley_2785()
     st.stop()
 
 if st.session_state.selected_system != SYSTEM_SNICSAT_ID:
