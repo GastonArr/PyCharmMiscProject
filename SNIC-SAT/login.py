@@ -14,42 +14,43 @@ COMISARIA_OPTIONS = [
 ]
 
 DEFAULT_SYSTEMS = ["snic-sat"]
+PLANILLAS_LEY_2785_SYSTEM = "planillas-ley-2785"
 
 USERS = {
     "Gaston": {
         "password": "10Capo555",
         "comisarias": COMISARIA_OPTIONS,
-        "systems": ["snic-sat", "operativos-verano"],
+        "systems": ["snic-sat", "operativos-verano", PLANILLAS_LEY_2785_SYSTEM],
     },
     "comisaria14": {
         "password": "comisaria14@",
         "comisarias": ["Comisaria 14"],
-        "systems": DEFAULT_SYSTEMS,
+        "systems": ["snic-sat", PLANILLAS_LEY_2785_SYSTEM],
     },
     "comisaria6": {
         "password": "comisaria6@",
         "comisarias": ["Comisaria 6"],
-        "systems": DEFAULT_SYSTEMS,
+        "systems": ["snic-sat", PLANILLAS_LEY_2785_SYSTEM],
     },
     "comisaria15": {
         "password": "comisaria15@",
         "comisarias": ["Comisaria 15"],
-        "systems": DEFAULT_SYSTEMS,
+        "systems": ["snic-sat", PLANILLAS_LEY_2785_SYSTEM],
     },
     "comisaria9": {
         "password": "comisaria9@",
         "comisarias": ["Comisaria 9"],
-        "systems": ["snic-sat", "operativos-verano"],
+        "systems": ["snic-sat", "operativos-verano", PLANILLAS_LEY_2785_SYSTEM],
     },
     "CENAF 4": {
         "password": "CENAF 4@",
         "comisarias": ["CENAF 4"],
-        "systems": DEFAULT_SYSTEMS,
+        "systems": ["snic-sat", PLANILLAS_LEY_2785_SYSTEM],
     },
     "comisaria42": {
         "password": "comisaria42@",
         "comisarias": ["Comisaria 42"],
-        "systems": ["snic-sat", "operativos-verano"],
+        "systems": ["snic-sat", "operativos-verano", PLANILLAS_LEY_2785_SYSTEM],
     },
     "DTCCO-PH": {
         "password": "DTCCO-PH@",
