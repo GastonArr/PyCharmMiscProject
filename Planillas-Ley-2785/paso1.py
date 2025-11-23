@@ -1,6 +1,7 @@
 # paso1.py
-import streamlit as st
 import datetime as dt
+
+import streamlit as st
 
 def render_paso1(UNIDADES_JURISDICCION, DOCUMENTO_OPTIONS):
     st.subheader("Paso 1: Unidad y datos básicos")
@@ -25,7 +26,11 @@ def render_paso1(UNIDADES_JURISDICCION, DOCUMENTO_OPTIONS):
     # ==========================
     # Tipo de documento (columna C)
     # ==========================
-    current_tipo_doc = st.session_state.get("tipo_documento", DOCUMENTO_OPTIONS[0])
+    fallback_doc = next(
+        (opt for opt in DOCUMENTO_OPTIONS if "no informado" in opt.lower()),
+        DOCUMENTO_OPTIONS[0],
+    )
+    current_tipo_doc = st.session_state.get("tipo_documento", fallback_doc)
     try:
         tipo_doc_index = DOCUMENTO_OPTIONS.index(current_tipo_doc)
     except ValueError:
@@ -48,10 +53,10 @@ def render_paso1(UNIDADES_JURISDICCION, DOCUMENTO_OPTIONS):
     st.session_state["identificacion"] = identificacion
 
     # ==========================
-    # Fecha de consulta (columna G)
+    # Fecha del hecho (columna G)
     # ==========================
     st.date_input(
-        "Fecha de consulta (columna G)",
-        key="fecha_consulta",
-        value=st.session_state.get("fecha_consulta", dt.date.today()),
+        "Fecha del hecho (columna G)",
+        key="fecha_hecho",
+        value=st.session_state.get("fecha_hecho", dt.date.today()),
     )

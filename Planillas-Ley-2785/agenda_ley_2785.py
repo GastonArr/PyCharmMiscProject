@@ -173,7 +173,9 @@ def obtener_dias_planificados(unidad: str) -> List[datetime.date]:
     return resultado
 
 
-def obtener_hechos_pendientes(unidad: str, fecha: datetime.date) -> Dict[str, Dict[str, Any]]:
+def obtener_hechos_pendientes(
+    unidad: str, fecha: datetime.date, incluir_completados: bool = False
+) -> Dict[str, Dict[str, Any]]:
     data = _leer_agenda()
     entry = data.get(unidad, {}).get(_key_fecha(fecha), {})
     hechos = entry.get("hechos", {})
@@ -186,6 +188,8 @@ def obtener_hechos_pendientes(unidad: str, fecha: datetime.date) -> Dict[str, Di
         if plan <= 0:
             plan = 1
         cargados = 1 if cargados > 0 else 0
+        if plan <= cargados and not incluir_completados:
+            continue
         resultado[hecho_id] = {
             "plan": 1,
             "cargados": cargados,
@@ -221,7 +225,11 @@ def registrar_carga_hecho(unidad: str, fecha: datetime.date, hecho_id: str) -> T
         return False, "Se alcanzó el total planificado para este hecho.", None
     registro["cargados"] = 1
     _guardar_agenda(data)
-    restantes = 0
+    restantes = sum(
+        max(int(info.get("plan", 1)) - int(info.get("cargados", 0)), 0)
+        for info in hechos.values()
+        if isinstance(info, dict)
+    )
     return True, None, restantes
 
 
@@ -302,7 +310,7 @@ def quitar_hecho(unidad: str, fecha: datetime.date, hecho_id: str) -> Tuple[bool
 
 
 def resumen_dia_dataframe(unidad: str, fecha: datetime.date) -> None:
-    detalle = obtener_hechos_pendientes(unidad, fecha)
+    detalle = obtener_hechos_pendientes(unidad, fecha, incluir_completados=True)
     if not detalle:
         st.info("No hay hechos pendientes para el día seleccionado.")
         return
@@ -497,7 +505,7 @@ def render_admin_agenda(username: Optional[str], allowed_unidades: Optional[List
     st.markdown(
         f"#### Hechos planificados para {fecha_sel.strftime('%d/%m/%Y')} — {unidad_sel}"
     )
-    detalle = obtener_hechos_pendientes(unidad_sel, fecha_sel)
+    detalle = obtener_hechos_pendientes(unidad_sel, fecha_sel, incluir_completados=True)
     if not detalle:
         st.info("No hay hechos pendientes en este día.")
     else:
@@ -608,6 +616,9 @@ def render_selector_agenda(unidad: str) -> Tuple[Optional[datetime.date], Dict[s
     if primer_pendiente and fecha_sel > primer_pendiente:
         msg = primer_pendiente.strftime("%d/%m/%Y")
         return None, {}, f"Debe completar primero el día {msg} antes de avanzar."
+    estado_dia = resumen.get(fecha_sel)
+    if estado_dia and estado_dia.get("restantes", 0) <= 0:
+        return fecha_sel, {}, "¡Felicitaciones! Completaste todos los hechos planificados para la fecha seleccionada."
     resumen_dia_dataframe(unidad, fecha_sel)
     pendientes = obtener_hechos_pendientes(unidad, fecha_sel)
     ordenados = sorted(
