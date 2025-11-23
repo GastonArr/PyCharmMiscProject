@@ -1,7 +1,21 @@
 """Login helpers and user configuration for the Streamlit SNIC app."""
 from __future__ import annotations
 
+from pathlib import Path
+import sys
+
 import streamlit as st
+
+_PLANILLAS_LEY_DIR = Path(__file__).resolve().parent.parent / "Planillas-Ley-2785"
+if str(_PLANILLAS_LEY_DIR) not in sys.path:
+    sys.path.insert(0, str(_PLANILLAS_LEY_DIR))
+
+try:
+    from planillas_ley_config import PLANILLAS_LEY_UNIDADES
+except Exception:
+    PLANILLAS_LEY_UNIDADES = []
+
+SYSTEM_PLANILLAS_LEY_ID = "planillas-ley-2785"
 
 COMISARIA_OPTIONS = [
     "Comisaria 14",
@@ -86,6 +100,9 @@ def render_login() -> None:
         if user_data and password_input == user_data.get("password"):
             allowed = list(user_data.get("comisarias", []))
             systems = list(user_data.get("systems") or DEFAULT_SYSTEMS)
+            if any(comisaria in PLANILLAS_LEY_UNIDADES for comisaria in allowed):
+                if SYSTEM_PLANILLAS_LEY_ID not in systems:
+                    systems.append(SYSTEM_PLANILLAS_LEY_ID)
             st.session_state.clear()
             st.session_state.authenticated = True
             st.session_state.username = username
