@@ -162,7 +162,7 @@ COLUMN_MAPPING = {
     "otro_doc": "D",  # sigue existiendo, pero no se carga en el formulario
     "identificacion": "E",
     "institucion": "F",
-    "fecha_consulta": "G",
+    "fecha_hecho": "G",
     "sexo1": "H",
     "trans1": "I",
     "edad": "J",
@@ -198,7 +198,7 @@ FIELD_LABELS = {
     "tipo_documento": "Tipo de documento (columna C)",
     "identificacion": "Identificación (columna E)",
     "institucion": "Unidad / Institución (columna F)",
-    "fecha_consulta": "Fecha de consulta (columna G)",
+    "fecha_hecho": "Fecha del hecho (columna G)",
     "sexo1": "Sexo (columna H)",
     "trans1": "Identidad trans (columna I)",
     "edad": "Edad (columna J)",
@@ -229,7 +229,7 @@ FIELD_LABELS = {
 }
 
 STEP_REQUIRED = {
-    1: ["institucion", "fecha_consulta", "tipo_documento", "identificacion"],
+    1: ["institucion", "fecha_hecho", "tipo_documento", "identificacion"],
     2: [
         "sexo1",
         "trans1",
@@ -274,34 +274,39 @@ ZERO_NOT_ALLOWED_FIELDS = {"edad", "edad_agresor"}
 
 def initialize_default_state():
     """
-    No seteamos institucion, tipo_documento ni identificacion acá,
-    porque se manejan en paso1.py según lo que elija el usuario.
+    No seteamos institucion ni identificacion acá, porque se manejan
+    en paso1.py según lo que elija el usuario.
     """
+    doc_default = next(
+        (opt for opt in DOCUMENTO_OPTIONS if "no informado" in opt.lower()),
+        DOCUMENTO_OPTIONS[0],
+    )
     defaults = {
-        "fecha_consulta": dt.date.today(),
-        "sexo1": SEXO1_OPTIONS[0],
-        "trans1": TRANS1_OPTIONS[0],
+        "tipo_documento": doc_default,
+        "fecha_hecho": st.session_state.get("agenda_planillas_fecha", dt.date.today()),
+        "sexo1": SEXO1_OPTIONS[-1],
+        "trans1": TRANS1_OPTIONS[-1],
         "edad": 0,
-        "nivel_educativo1": EDUCACION1_OPTIONS[0],
-        "complitud1": COMPLITUD1_OPTIONS[0],
-        "ocupada1": OCUPADA1_OPTIONS[0],
-        "actividad1": ACTIVIDAD1_OPTIONS[0],
-        "vinculo": VINCULO_OPTIONS[0],
-        "convivencia": CONVIVENCIA_OPTIONS[0],
-        "viol_fisica": TIPO_OPTIONS[0],
-        "viol_psico": TIPO_OPTIONS[0],
-        "viol_econ": TIPO_OPTIONS[0],
-        "viol_sexual": TIPO_OPTIONS[0],
-        "modalidad": MODALIDAD_OPTIONS[0],
-        "tiempo": TIEMPO_OPTIONS[0],
-        "frecuencia": FRECUENCIA_OPTIONS[0],
-        "sexo2": SEXO2_OPTIONS[0],
-        "trans2": TRANS2_OPTIONS[0],
+        "nivel_educativo1": EDUCACION1_OPTIONS[-1],
+        "complitud1": COMPLITUD1_OPTIONS[-1],
+        "ocupada1": OCUPADA1_OPTIONS[-1],
+        "actividad1": ACTIVIDAD1_OPTIONS[-1],
+        "vinculo": VINCULO_OPTIONS[-1],
+        "convivencia": CONVIVENCIA_OPTIONS[-1],
+        "viol_fisica": TIPO_OPTIONS[-1],
+        "viol_psico": TIPO_OPTIONS[-1],
+        "viol_econ": TIPO_OPTIONS[-1],
+        "viol_sexual": TIPO_OPTIONS[-1],
+        "modalidad": MODALIDAD_OPTIONS[-1],
+        "tiempo": TIEMPO_OPTIONS[-1],
+        "frecuencia": FRECUENCIA_OPTIONS[-1],
+        "sexo2": SEXO2_OPTIONS[-1],
+        "trans2": TRANS2_OPTIONS[-1],
         "edad_agresor": 0,
-        "nivel_educativo2": EDUCACION2_OPTIONS[0],
-        "complitud2": COMPLITUD2_OPTIONS[0],
-        "actividad2": ACTIVIDAD2_OPTIONS[0],
-        "otra_actividad2": OTRA2_OPTIONS[0],
+        "nivel_educativo2": EDUCACION2_OPTIONS[-1],
+        "complitud2": COMPLITUD2_OPTIONS[-1],
+        "actividad2": ACTIVIDAD2_OPTIONS[-1],
+        "otra_actividad2": OTRA2_OPTIONS[-1],
         "info_especifica": "",
         "otro_vinculo": "",
         "fecha_modificacion": "",
@@ -335,7 +340,7 @@ def build_form_data_from_state():
         else:
             val = clean.get(k, st.session_state.get(k))
 
-        if k == "fecha_consulta" and isinstance(val, dt.date):
+        if k == "fecha_hecho" and isinstance(val, dt.date):
             val = val.strftime("%d/%m/%Y")
 
         out[k] = val
@@ -507,22 +512,29 @@ def run_planillas_ley_2785_app(allowed_units=None, configure_page=True, is_admin
     if "step" not in st.session_state:
         st.session_state.step = 1
 
-    initialize_default_state()
-
     st.title("Carga de registros - Ley 2785")
 
     unidad_sel = render_selector_unidad(unidades)
     fecha_agenda, hechos_pendientes, mensaje_agenda = render_selector_agenda(unidad_sel)
 
+    if fecha_agenda:
+        st.session_state["fecha_hecho"] = fecha_agenda
+
+    initialize_default_state()
+
     if mensaje_agenda:
         if str(mensaje_agenda).startswith("¡Felicitaciones!"):
             st.success(mensaje_agenda)
+            return
         else:
             st.warning(mensaje_agenda)
         if not fecha_agenda:
             return
 
-    if not fecha_agenda or not hechos_pendientes:
+    if not fecha_agenda:
+        st.info("No hay hechos planificados para continuar con la carga.")
+        return
+    if not hechos_pendientes:
         st.info("No hay hechos planificados para continuar con la carga.")
         return
 
