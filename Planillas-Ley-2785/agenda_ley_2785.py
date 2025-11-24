@@ -549,27 +549,21 @@ def render_admin_agenda(username: Optional[str], allowed_unidades: Optional[List
                     st.error(msg or "No se pudo quitar el hecho.")
     st.markdown("---")
     with st.form("agenda_planillas_form"):
-        st.markdown("#### Agregar hechos al día seleccionado")
+        st.markdown("#### Agregar hecho al día seleccionado")
         referencia_form = st.text_input(
             "Información específica (AI) de referencia (opcional)",
             key="agenda_planillas_ref_form",
-        )
-        cantidad = st.number_input(
-            "Cantidad de hechos a asignar",
-            min_value=1,
-            step=1,
-            value=1,
-            key="agenda_planillas_cantidad",
         )
         submitted = st.form_submit_button("Agregar al día")
         if submitted:
             ok, msg = asignar_hecho(
                 unidad_sel,
                 fecha_sel,
-                int(cantidad),
+                1,
                 referencia_form,
             )
             if ok:
+                st.session_state["agenda_planillas_ref_form"] = ""
                 st.success("Asignación guardada correctamente.")
                 st.rerun()
             else:
