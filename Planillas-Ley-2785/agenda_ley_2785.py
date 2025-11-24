@@ -563,6 +563,7 @@ def render_admin_agenda(username: Optional[str], allowed_unidades: Optional[List
                 referencia_form,
             )
             if ok:
+                st.session_state["agenda_planillas_ref_form"] = ""
                 st.success("Asignación guardada correctamente.")
                 st.rerun()
             else:
