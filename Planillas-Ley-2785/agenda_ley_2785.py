@@ -156,16 +156,6 @@ def _ensure_entry(data: AgendaData, unidad: str, fecha: datetime.date) -> Dict[s
     return entry
 
 
-def _rerun() -> None:
-    rerun_func = getattr(st, "rerun", None)
-    if rerun_func:
-        rerun_func()
-        return
-    experimental_rerun = getattr(st, "experimental_rerun", None)
-    if experimental_rerun:
-        experimental_rerun()
-
-
 # ===========================
 # API pública de datos
 # ===========================
@@ -493,7 +483,7 @@ def render_admin_agenda(username: Optional[str], allowed_unidades: Optional[List
                 else:
                     _guardar_agenda(data)
                     st.success("Se restauró el almanaque desde el archivo subido.")
-                    _rerun()
+                    st.rerun()
 
     unidades = allowed_unidades or []
     if not unidades:
@@ -547,14 +537,14 @@ def render_admin_agenda(username: Optional[str], allowed_unidades: Optional[List
                     )
                     if ok:
                         st.success(f"Se actualizó {etiqueta}.")
-                        _rerun()
+                        st.rerun()
                     else:
                         st.error(msg or "No se pudo actualizar la asignación.")
             if st.button("Quitar", key=f"agenda_planillas_remove_{hecho_id}"):
                 ok, msg = quitar_hecho(unidad_sel, fecha_sel, hecho_id)
                 if ok:
                     st.warning(f"Se quitó {etiqueta} del día seleccionado.")
-                    _rerun()
+                    st.rerun()
                 else:
                     st.error(msg or "No se pudo quitar el hecho.")
     st.markdown("---")
@@ -564,18 +554,24 @@ def render_admin_agenda(username: Optional[str], allowed_unidades: Optional[List
             "Información específica (AI) de referencia (opcional)",
             key="agenda_planillas_ref_form",
         )
+        cantidad = st.number_input(
+            "Cantidad de hechos a asignar",
+            min_value=1,
+            step=1,
+            value=1,
+            key="agenda_planillas_cantidad",
+        )
         submitted = st.form_submit_button("Agregar al día")
         if submitted:
-            st.session_state["agenda_planillas_ref_form"] = ""
             ok, msg = asignar_hecho(
                 unidad_sel,
                 fecha_sel,
-                1,
+                int(cantidad),
                 referencia_form,
             )
             if ok:
                 st.success("Asignación guardada correctamente.")
-                _rerun()
+                st.rerun()
             else:
                 st.error(msg or "No se pudo guardar la asignación.")
 
