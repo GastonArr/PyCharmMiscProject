@@ -3,6 +3,11 @@ import datetime
 import os
 import sys
 from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 import direcciones          # módulo externo para pantalla de direcciones streamlit run app.py
 import Robos_Hurtos         # subflujo para delitos Robos/Hurtos
 import otros                # subflujo para Lesiones / Desaparición
