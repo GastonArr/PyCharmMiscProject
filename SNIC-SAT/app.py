@@ -407,53 +407,54 @@ st.session_state.fila = fila_objetivo
 st.session_state.planilla_llena = planilla_llena
 
 # --- Botón Descargar Excel + Uploader con validación de nombre ---
-st.sidebar.markdown("---")
-st.sidebar.subheader("Descargar Excel SNIC")
-st.sidebar.caption("Usted puede descargar las SNIC que va cargando.")
+st.caption("Usted puede descargar las SNIC que va cargando.")
+col_dl, col_upload = st.columns([1, 1])
 
-_ext = os.path.splitext(excel_path_preview)[1].lower()
-if _ext == ".xlsm":
-    mime = "application/vnd.ms-excel.sheet.macroEnabled.12"
-elif _ext == ".xlsx":
-    mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-else:  # .xls u otro
-    mime = "application/vnd.ms-excel"
+with col_dl:
+    _ext = os.path.splitext(excel_path_preview)[1].lower()
+    if _ext == ".xlsm":
+        mime = "application/vnd.ms-excel.sheet.macroEnabled.12"
+    elif _ext == ".xlsx":
+        mime = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    else:  # .xls u otro
+        mime = "application/vnd.ms-excel"
 
-if excel_bytes is None:
-    st.sidebar.caption("⚠️ No se encontró el Excel en el bucket. Se creará automáticamente cuando continúe.")
-else:
-    st.sidebar.caption(f"Comisaría: **{comisaria_actual}**")
-    try:
-        st.sidebar.download_button(
-            label="📥 Descargar Excel",
-            data=excel_bytes,
-            file_name=os.path.basename(excel_path_preview),
-            mime=mime,
-            use_container_width=True,
-        )
-    except Exception as e:
-        st.sidebar.caption(f"⚠️ No se pudo preparar la descarga: {e}")
+    if excel_bytes is None:
+        st.caption("⚠️ No se encontró el Excel en el bucket. Se creará automáticamente cuando continúe.")
+    else:
+        try:
+            st.download_button(
+                label="📥 Descargar Excel",
+                data=excel_bytes,
+                file_name=os.path.basename(excel_path_preview),
+                mime=mime,
+                use_container_width=True,
+            )
+        except Exception as e:
+            st.caption(f"⚠️ No se pudo preparar la descarga: {e}")
 
 if usuario_es_admin:
-    expected_name = os.path.basename(excel_path_preview)
-    uploaded = st.file_uploader(
-        f"Subir/Reemplazar Excel (nombre requerido: **{expected_name}**)",
-        type=["xlsm", "xlsx", "xls"],
-        key="uploader_excel"
-    )
-    if uploaded is not None:
-        if uploaded.name != expected_name:
-            st.error(f"El archivo debe llamarse **{expected_name}**. Renombralo y volvé a subirlo para evitar conflictos.")
-        else:
-            try:
-                upload_blob_bytes(
-                    excel_path_preview,
-                    uploaded.getbuffer().tobytes(),
-                )
-                st.success(f"Se reemplazó el Excel de {comisaria_actual}: {expected_name}")
-                _invalidate_excel_caches()
-            except Exception as e:
-                st.error(f"No se pudo guardar el archivo en el bucket: {e}")
+    with col_upload:
+        st.markdown("— o —")
+        expected_name = os.path.basename(excel_path_preview)
+        uploaded = st.file_uploader(
+            f"Subir/Reemplazar Excel (nombre requerido: **{expected_name}**)",
+            type=["xlsm", "xlsx", "xls"],
+            key="uploader_excel"
+        )
+        if uploaded is not None:
+            if uploaded.name != expected_name:
+                st.error(f"El archivo debe llamarse **{expected_name}**. Renombralo y volvé a subirlo para evitar conflictos.")
+            else:
+                try:
+                    upload_blob_bytes(
+                        excel_path_preview,
+                        uploaded.getbuffer().tobytes(),
+                    )
+                    st.success(f"Se reemplazó el Excel de {comisaria_actual}: {expected_name}")
+                    _invalidate_excel_caches()
+                except Exception as e:
+                    st.error(f"No se pudo guardar el archivo en el bucket: {e}")
 
 if st.session_state.step == 2:
     if st.session_state.planilla_llena:
