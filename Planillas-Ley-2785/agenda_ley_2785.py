@@ -163,8 +163,20 @@ def _ensure_entry(data: AgendaData, unidad: str, fecha: datetime.date) -> Dict[s
 
 def obtener_dias_planificados(unidad: str) -> List[datetime.date]:
     data = _leer_agenda()
-    dias = data.get(unidad, {})
-    ordenados = _ordenar_dias(list(dias.keys()))
+    dias_con_pendientes = {}
+    for key, entry in data.get(unidad, {}).items():
+        hechos = entry.get("hechos", {})
+        if not isinstance(hechos, dict):
+            continue
+        for valores in hechos.values():
+            if not isinstance(valores, dict):
+                continue
+            plan = max(int(valores.get("plan", 1)), 1)
+            cargados = 1 if int(valores.get("cargados", 0)) > 0 else 0
+            if plan > cargados:
+                dias_con_pendientes[key] = entry
+                break
+    ordenados = _ordenar_dias(list(dias_con_pendientes.keys()))
     resultado = []
     for key in ordenados:
         fecha = _parse_fecha(key)
