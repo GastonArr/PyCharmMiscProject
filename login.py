@@ -106,11 +106,16 @@ def render_user_header() -> None:
     current = st.session_state.get("comisaria")
     comisaria_label = _comisaria_display(allowed, current=current)
     system_label = st.session_state.get("selected_system_label") or "Sin sistema seleccionado"
-    col_info, col_logout = st.columns([4, 1])
+    col_info, col_back, col_logout = st.columns([4, 1, 1])
     with col_info:
         st.success(
             f"👮 Usuario: {st.session_state.get('username', 'Desconocido')} — Comisaría: {comisaria_label} — Sistema: {system_label}"
         )
+    with col_back:
+        if st.button("Volver al panel", use_container_width=True):
+            st.session_state.selected_system = None
+            st.session_state.selected_system_label = None
+            st.rerun()
     with col_logout:
         if st.button("Cerrar sesión", use_container_width=True):
             st.session_state.clear()
